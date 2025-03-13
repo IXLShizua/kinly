@@ -1,4 +1,3 @@
-use crate::launcher::types::response::base::profile::skin::metadata::Model;
 use crate::{
     injector,
     injector::types::{
@@ -11,14 +10,17 @@ use crate::{
             },
         },
     },
-    launcher, state,
+    launcher,
+    launcher::types::response::base::profile::skin::metadata::Model,
+    state,
 };
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{on, MethodFilter},
-    Json, Router,
+    Json,
+    Router,
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use std::time::{self, SystemTime, UNIX_EPOCH};

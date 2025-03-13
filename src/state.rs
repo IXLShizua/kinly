@@ -1,11 +1,10 @@
 use crate::{config, launcher};
-use std::time::Duration;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 #[derive(Clone)]
 pub struct State {
     pub key_pair: Arc<KeyPair>,
-    pub servers: Arc<HashMap<String, config::Server>>,
+    pub servers: Arc<HashMap<String, config::server::Server>>,
     pub sockets: Arc<Sockets>,
 }
 
@@ -20,7 +19,7 @@ pub struct Sockets {
 }
 
 impl Sockets {
-    pub async fn from_servers(servers: &HashMap<String, config::Server>) -> Sockets {
+    pub async fn from_servers(servers: &HashMap<String, config::server::Server>) -> Sockets {
         let mut sockets = Sockets {
             inner: HashMap::new(),
         };

@@ -10,7 +10,8 @@ use crate::launcher::{
 use dashmap::DashMap;
 use futures_util::{
     stream::{SplitSink, SplitStream},
-    SinkExt, StreamExt,
+    SinkExt,
+    StreamExt,
 };
 use std::{
     collections::VecDeque,

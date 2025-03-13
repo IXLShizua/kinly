@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::PathBuf};
 pub struct Config {
     pub api: Api,
     pub keys: KeyPairPaths,
-    pub servers: HashMap<String, Server>,
+    pub servers: HashMap<String, server::Server>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -20,10 +20,34 @@ pub struct KeyPairPaths {
     pub public: PathBuf,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Server {
-    pub api: url::Url,
-    pub token: String,
+pub mod server {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct Server {
+        pub api: url::Url,
+        pub token: String,
+        pub meta: meta::Meta,
+    }
+
+    pub mod meta {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Serialize, Deserialize, Debug)]
+        pub struct Meta {
+            pub assets: Assets,
+        }
+
+        #[derive(Serialize, Deserialize, Debug)]
+        #[serde(untagged)]
+        pub enum Assets {
+            AllInOne(Vec<String>),
+            Separated {
+                skins: Vec<String>,
+                capes: Vec<String>,
+            },
+        }
+    }
 }
 
 pub fn default() -> Config {
