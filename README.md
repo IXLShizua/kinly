@@ -36,10 +36,10 @@
       "meta": {
         "assets": {
           "skins": [
-            "https://skins.example.com"
+            "skins.example.com"
           ],
           "capes": [
-            "https://capes.example.com"
+            "capes.example.com"
           ]
         }
       },
