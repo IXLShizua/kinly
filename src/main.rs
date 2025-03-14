@@ -2,7 +2,7 @@ use auth_proxy_gl::{args, config, config::Config as AppConfig, routes, state, st
 use clap::Parser;
 use figment::{providers, providers::Format};
 use futures::StreamExt;
-use openssl::{rsa, rsa::Rsa};
+use openssl::rsa;
 use std::{
     error::Error,
     fs,
@@ -12,15 +12,9 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::{net, runtime, signal};
+use tokio::{net, signal};
 use tracing::{debug, info, span, Level};
-use tracing_subscriber::{
-    filter::LevelFilter,
-    fmt,
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter,
-};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Настраиваем логирование с фильтрацией уровня через переменную окружения.
