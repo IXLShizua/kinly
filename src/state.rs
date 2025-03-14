@@ -1,10 +1,12 @@
 use crate::{config, launcher};
 use openssl::{pkey, rsa};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Clone)]
 pub struct State {
+    pub config: Arc<config::Config>,
     pub key_pair: Arc<KeyPair>,
+    pub data_dir: PathBuf,
     pub servers: Arc<HashMap<String, config::server::Server>>,
     pub sockets: Arc<Sockets>,
 }

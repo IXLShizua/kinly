@@ -3,7 +3,15 @@ use clap::Parser;
 use figment::{providers, providers::Format};
 use futures::StreamExt;
 use openssl::{rsa, rsa::Rsa};
-use std::{error::Error, fs, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    error::Error,
+    fs,
+    io::Write,
+    net::SocketAddr,
+    os::unix::fs::OpenOptionsExt,
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::{net, runtime, signal};
 use tracing::{debug, info, span, Level};
 use tracing_subscriber::{
@@ -15,8 +23,9 @@ use tracing_subscriber::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Настраиваем логирование с фильтрацией уровня через переменную окружения.
     let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
+        .with_default_directive(tracing::Level::INFO.into())
         .with_env_var("LOGGING_LEVEL")
         .from_env()?;
     tracing_subscriber::registry()
@@ -26,48 +35,54 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args = args::Args::parse();
 
-    if !fs::exists(&args.config_path)? {
+    if !args.config_path.exists() {
         info!("Config file not found. Saving default.");
 
         let default_config = serde_json::to_string_pretty(&config::default())?;
-
         fs::write(&args.config_path, default_config)?;
-
         return Ok(());
     }
 
     let key_pair = {
         let span = span!(Level::DEBUG, "keys");
-        let span = span.entered();
+        let _enter = span.enter();
 
         let keys_dir = args.data_dir.join("keys");
-        debug!("Keys directory:: {:?}", keys_dir.canonicalize()?);
-        if !fs::exists(&keys_dir)? {
-            debug!("Key directory not found. Creation");
-            fs::create_dir_all(&keys_dir)?;
-        }
+        debug!(
+            "Keys directory:: {:?}",
+            keys_dir.canonicalize().unwrap_or_else(|_| keys_dir.clone())
+        );
+
+        fs::create_dir_all(&keys_dir)?;
 
         let private_key_path = keys_dir.join("private.pem");
         debug!(
             "Path to private key: {:?}",
-            private_key_path.canonicalize()?
+            private_key_path
+                .canonicalize()
+                .unwrap_or_else(|_| private_key_path.clone())
         );
-        let rsa_private = if !fs::exists(&private_key_path)? {
-            debug!("Private key not found. Generation");
+
+        let rsa_private = if !private_key_path.exists() {
+            debug!("Private key not found. Generation.");
+
             let rsa = rsa::Rsa::generate(4096)?;
 
-            let _ = fs::remove_file(&private_key_path);
-            fs::write(&private_key_path, rsa.private_key_to_pem()?)?;
+            let mut options = fs::OpenOptions::new();
+            options.write(true).create_new(true).mode(0o600);
+
+            let mut file = options.open(&private_key_path)?;
+            file.write_all(&rsa.private_key_to_pem()?)?;
 
             rsa
         } else {
-            debug!("Private key found. Trying to read");
-            let bytes = fs::read(&private_key_path)?;
-            Rsa::private_key_from_pem(&bytes)?
-        };
-        let public_key = String::from_utf8(rsa_private.public_key_to_pem()?)?;
+            debug!("Private key found. Trying to read.");
 
-        let _ = span.exit();
+            let key_data = fs::read(&private_key_path)?;
+            rsa::Rsa::private_key_from_pem(&key_data)?
+        };
+
+        let public_key = String::from_utf8(rsa_private.public_key_to_pem()?)?;
 
         state::KeyPair {
             rsa: rsa_private,
@@ -79,12 +94,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join(providers::Json::file(&args.config_path))
         .extract::<AppConfig>()?;
 
-    let rt = runtime::Builder::new_multi_thread().enable_all().build()?;
-
-    rt.block_on(_main(config, key_pair))
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(_main(config, args.data_dir, key_pair))
 }
 
-async fn _main(config: AppConfig, key_pair: state::KeyPair) -> Result<(), Box<dyn Error>> {
+async fn _main(
+    config: AppConfig,
+    data_dir: PathBuf,
+    key_pair: state::KeyPair,
+) -> Result<(), Box<dyn Error>> {
     let sockets = Arc::new(Sockets::from_servers(&config.servers).await);
     let router = axum::Router::new()
         .nest(
@@ -92,11 +112,14 @@ async fn _main(config: AppConfig, key_pair: state::KeyPair) -> Result<(), Box<dy
             axum::Router::new()
                 .merge(routes::root::router())
                 .nest("/api", routes::api::router())
-                .nest("/sessionserver", routes::sessionserver::router()),
+                .nest("/sessionserver", routes::sessionserver::router())
+                .nest("/assets", routes::assets::router()),
         )
         .with_state(state::State {
-            servers: Arc::new(config.servers),
+            config: Arc::new(config.clone()),
             key_pair: Arc::new(key_pair),
+            data_dir,
+            servers: Arc::new(config.servers),
             sockets: sockets.clone(),
         });
 

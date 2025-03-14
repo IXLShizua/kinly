@@ -150,7 +150,7 @@ pub mod base {
 
             #[derive(Serialize, Deserialize, Debug)]
             pub struct Skin {
-                pub url: String,
+                pub url: url::Url,
                 pub digest: String,
 
                 #[serde(skip_serializing_if = "Option::is_none")]
@@ -183,7 +183,8 @@ pub mod base {
 
             #[derive(Serialize, Deserialize, Debug)]
             pub struct Cape {
-                pub url: String,
+                pub url: url::Url,
+                pub digest: String,
             }
         }
     }

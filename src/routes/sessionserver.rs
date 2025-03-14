@@ -1,4 +1,6 @@
 use crate::{
+    config,
+    config::{server::experimental::rewrite::Rewrite, Meta},
     injector,
     injector::types::{
         request,
@@ -12,6 +14,7 @@ use crate::{
     },
     launcher,
     launcher::types::response::base::profile::skin::metadata::Model,
+    routes::assets,
     state,
 };
 use axum::{
@@ -43,7 +46,7 @@ async fn has_joined(
     let Some(current_server) = state.servers.get(&server_id) else {
         return StatusCode::NO_CONTENT.into_response();
     };
-    let Some(socket) = state.sockets.socket(server_id) else {
+    let Some(socket) = state.sockets.socket(&server_id) else {
         return StatusCode::NO_CONTENT.into_response();
     };
 
@@ -72,7 +75,18 @@ async fn has_joined(
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-    let response = transform_profile(now, false, &state.key_pair.rsa, profile.player_profile);
+    let response = map_profile(
+        profile.player_profile,
+        &state.key_pair.rsa,
+        now,
+        false,
+        server_id,
+        current_server
+            .experimental
+            .as_ref()
+            .and_then(|v| v.rewrite.as_ref())
+            .map(|v| (&state.config.meta, v)),
+    );
 
     (StatusCode::OK, Json(response)).into_response()
 }
@@ -85,7 +99,7 @@ async fn profile_by_uuid(
     let Some(current_server) = state.servers.get(&server_id) else {
         return StatusCode::NO_CONTENT.into_response();
     };
-    let Some(socket) = state.sockets.socket(server_id) else {
+    let Some(socket) = state.sockets.socket(&server_id) else {
         return StatusCode::NO_CONTENT.into_response();
     };
 
@@ -97,19 +111,68 @@ async fn profile_by_uuid(
     };
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let response = transform_profile(now, !unsigned, &state.key_pair.rsa, profile.player_profile);
+    let response = map_profile(
+        profile.player_profile,
+        &state.key_pair.rsa,
+        now,
+        !unsigned,
+        server_id,
+        current_server
+            .experimental
+            .as_ref()
+            .and_then(|v| v.rewrite.as_ref())
+            .map(|v| (&state.config.meta, v)),
+    );
 
     (StatusCode::OK, Json(response)).into_response()
 }
 
-fn transform_profile(
+fn map_profile(
+    profile: launcher::types::response::base::profile::Profile,
+    rsa: &rsa::Rsa<pkey::Private>,
     now: time::Duration,
     signed: bool,
-    rsa: &rsa::Rsa<pkey::Private>,
-    profile: launcher::types::response::base::profile::Profile,
+    server_id: impl Into<String>,
+    rewrite: Option<(&Meta, &Rewrite)>,
 ) -> profile::Profile {
+    let server_id = server_id.into();
+
+    let (rewritten_skin_url, rewritten_cape_url) = match rewrite {
+        None => (None, None),
+        Some((meta, rewrite)) => {
+            let assets = meta.public.join(&format!("{}/assets/", server_id)).ok();
+
+            match rewrite {
+                Rewrite::AllInOne(v) if *v => (assets.clone(), assets),
+                Rewrite::AllInOne(_) => (None, None),
+                Rewrite::Separated {
+                    skins: skins_flag,
+                    capes: capes_flag,
+                } => match (*skins_flag, *capes_flag) {
+                    (true, true) => (assets.clone(), assets),
+                    (true, false) => (assets, None),
+                    (false, true) => (None, assets),
+                    (false, false) => (None, None),
+                },
+            }
+        }
+    };
+
     let skin = profile.assets.skin.map(|skin| skin::Skin {
-        url: skin.url,
+        url: rewritten_skin_url
+            .and_then(|v| {
+                let asset = assets::Pair {
+                    hash: skin.digest,
+                    original: skin.url.clone(),
+                };
+                let serialized =
+                    serde_json::to_string(&asset).expect("This should not fail with an error");
+                let encoded = base64::encode_block(serialized.as_bytes());
+
+                v.join(&encoded).ok()
+            })
+            .map(|v| v.to_string())
+            .unwrap_or(skin.url.to_string()),
         metadata: skin.metadata.and_then(|meta| match meta.model {
             Model::Default => None,
             Model::Slim => Some(metadata::Metadata {
@@ -117,7 +180,22 @@ fn transform_profile(
             }),
         }),
     });
-    let cape = profile.assets.cape.map(|cape| cape::Cape { url: cape.url });
+    let cape = profile.assets.cape.map(|cape| cape::Cape {
+        url: rewritten_cape_url
+            .and_then(|v| {
+                let asset = assets::Pair {
+                    hash: cape.digest,
+                    original: cape.url.clone(),
+                };
+                let serialized =
+                    serde_json::to_string(&asset).expect("This should not fail with an error");
+                let encoded = base64::encode_block(serialized.as_bytes());
+
+                v.join(&encoded).ok()
+            })
+            .map(|v| v.to_string())
+            .unwrap_or(cape.url.to_string()),
+    });
 
     let textures = textures::Textures {
         timestamp: now.as_millis(),
