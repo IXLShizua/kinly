@@ -22,7 +22,7 @@ use axum::{
     Json,
     Router,
 };
-use base64::{prelude::BASE64_STANDARD, Engine};
+use openssl::{base64, pkey, rsa, rsa::Padding};
 use std::time::{self, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
@@ -72,7 +72,7 @@ async fn has_joined(
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-    let response = transform_profile(now, profile.player_profile);
+    let response = transform_profile(now, false, &state.key_pair.rsa, profile.player_profile);
 
     (StatusCode::OK, Json(response)).into_response()
 }
@@ -80,7 +80,7 @@ async fn has_joined(
 async fn profile_by_uuid(
     State(state): State<state::State>,
     Path((server_id, uuid)): Path<(String, Uuid)>,
-    Query(_): Query<request::profile_by_uuid::Query>,
+    Query(request::profile_by_uuid::Query { unsigned }): Query<request::profile_by_uuid::Query>,
 ) -> impl IntoResponse {
     let Some(current_server) = state.servers.get(&server_id) else {
         return StatusCode::NO_CONTENT.into_response();
@@ -97,14 +97,15 @@ async fn profile_by_uuid(
     };
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-
-    let response = transform_profile(now, profile.player_profile);
+    let response = transform_profile(now, !unsigned, &state.key_pair.rsa, profile.player_profile);
 
     (StatusCode::OK, Json(response)).into_response()
 }
 
 fn transform_profile(
     now: time::Duration,
+    signed: bool,
+    rsa: &rsa::Rsa<pkey::Private>,
     profile: launcher::types::response::base::profile::Profile,
 ) -> profile::Profile {
     let skin = profile.assets.skin.map(|skin| skin::Skin {
@@ -122,11 +123,24 @@ fn transform_profile(
         timestamp: now.as_millis(),
         profile_id: profile.uuid.simple().to_string(),
         profile_name: profile.username.clone(),
-        signature_required: false,
+        signature_required: signed,
         textures: textures::kind::Kind { skin, cape },
     };
+    let serialized_textures = serde_json::to_string(&textures).unwrap();
 
-    let encoded = BASE64_STANDARD.encode(serde_json::to_string(&textures).unwrap());
+    let encoded = base64::encode_block(serialized_textures.as_bytes());
+    let encoded_signature = match signed {
+        true => {
+            let mut bytes = vec![0u8; encoded.len()];
+            let _ = rsa
+                .private_encrypt(encoded.as_bytes(), &mut bytes, Padding::PKCS1)
+                .unwrap();
+            let encoded_encrypted = base64::encode_block(&bytes);
+
+            Some(encoded_encrypted)
+        }
+        false => None,
+    };
 
     profile::Profile {
         id: profile.uuid.simple().to_string(),
@@ -134,7 +148,7 @@ fn transform_profile(
         properties: vec![profile::property::Property {
             name: "textures".to_string(),
             value: encoded,
-            signature: None,
+            signature: encoded_signature,
         }],
     }
 }

@@ -36,7 +36,7 @@ async fn root(
             implementation_version: None,
         },
         skin_domains,
-        signature_public_key: state.key_pair.public.to_string(),
+        signature_public_key: state.key_pair.public.clone(),
     };
 
     (StatusCode::OK, Json(response)).into_response()

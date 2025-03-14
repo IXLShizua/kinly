@@ -1,11 +1,11 @@
-use anyhow::Context;
 use auth_proxy_gl::{args, config, config::Config as AppConfig, routes, state, state::Sockets};
 use clap::Parser;
 use figment::{providers, providers::Format};
 use futures::StreamExt;
-use std::{error::Error, fs, net::SocketAddr, sync::Arc};
+use openssl::{rsa, rsa::Rsa};
+use std::{error::Error, fs, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::{net, runtime, signal};
-use tracing::{debug, info};
+use tracing::{debug, info, span, Level};
 use tracing_subscriber::{
     filter::LevelFilter,
     fmt,
@@ -36,18 +36,56 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let key_pair = {
+        let span = span!(Level::DEBUG, "keys");
+        let span = span.entered();
+
+        let keys_dir = args.data_dir.join("keys");
+        debug!("Keys directory:: {:?}", keys_dir.canonicalize()?);
+        if !fs::exists(&keys_dir)? {
+            debug!("Key directory not found. Creation");
+            fs::create_dir_all(&keys_dir)?;
+        }
+
+        let private_key_path = keys_dir.join("private.pem");
+        debug!(
+            "Path to private key: {:?}",
+            private_key_path.canonicalize()?
+        );
+        let rsa_private = if !fs::exists(&private_key_path)? {
+            debug!("Private key not found. Generation");
+            let rsa = rsa::Rsa::generate(4096)?;
+
+            let _ = fs::remove_file(&private_key_path);
+            fs::write(&private_key_path, rsa.private_key_to_pem()?)?;
+
+            rsa
+        } else {
+            debug!("Private key found. Trying to read");
+            let bytes = fs::read(&private_key_path)?;
+            Rsa::private_key_from_pem(&bytes)?
+        };
+        let public_key = String::from_utf8(rsa_private.public_key_to_pem()?)?;
+
+        let _ = span.exit();
+
+        state::KeyPair {
+            rsa: rsa_private,
+            public: public_key,
+        }
+    };
+
     let config = figment::Figment::new()
         .join(providers::Json::file(&args.config_path))
         .extract::<AppConfig>()?;
 
     let rt = runtime::Builder::new_multi_thread().enable_all().build()?;
 
-    rt.block_on(_main(config))
+    rt.block_on(_main(config, key_pair))
 }
 
-async fn _main(config: AppConfig) -> Result<(), Box<dyn Error>> {
+async fn _main(config: AppConfig, key_pair: state::KeyPair) -> Result<(), Box<dyn Error>> {
     let sockets = Arc::new(Sockets::from_servers(&config.servers).await);
-
     let router = axum::Router::new()
         .nest(
             "/:server_id",
@@ -58,18 +96,7 @@ async fn _main(config: AppConfig) -> Result<(), Box<dyn Error>> {
         )
         .with_state(state::State {
             servers: Arc::new(config.servers),
-            key_pair: Arc::new(state::KeyPair {
-                public: tokio::fs::read_to_string(&config.keys.public)
-                    .await
-                    .with_context(|| {
-                        format!("failed to read public key from {:?}", config.keys.public)
-                    })?,
-                private: tokio::fs::read_to_string(&config.keys.private)
-                    .await
-                    .with_context(|| {
-                        format!("failed to read private key from {:?}", config.keys.private)
-                    })?,
-            }),
+            key_pair: Arc::new(key_pair),
             sockets: sockets.clone(),
         });
 

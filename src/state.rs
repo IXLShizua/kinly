@@ -1,4 +1,5 @@
 use crate::{config, launcher};
+use openssl::{pkey, rsa};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 #[derive(Clone)]
@@ -9,8 +10,8 @@ pub struct State {
 }
 
 pub struct KeyPair {
+    pub rsa: rsa::Rsa<pkey::Private>,
     pub public: String,
-    pub private: String,
 }
 
 #[derive(Default)]
