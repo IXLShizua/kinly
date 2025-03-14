@@ -10,8 +10,7 @@ use crate::launcher::{
 use dashmap::DashMap;
 use futures_util::{
     stream::{SplitSink, SplitStream},
-    SinkExt,
-    StreamExt,
+    SinkExt, StreamExt,
 };
 use std::{
     collections::VecDeque,
@@ -22,6 +21,7 @@ use std::{
 use tokio::{
     net::TcpStream,
     sync::{mpsc, oneshot},
+    task,
 };
 use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
 use tracing::debug;
@@ -233,12 +233,14 @@ async fn start_handle_loop(
                         input::Loop::Shutdown(sender) => {
                             debug!("start_handle_loop shutdown received");
 
-                            // Initiate shutdown of the WebSocket handler.
-                            let (ws_tx, ws_rx) = oneshot::channel();
-                            let _ = ws_input_ev_sender
-                                .send(input::websocket::Loop::Shutdown(ws_tx))
-                                .await;
-                            let _ = ws_rx.await;
+                            if ws_is_connected {
+                                // Initiate shutdown of the WebSocket handler.
+                                let (ws_tx, ws_rx) = oneshot::channel();
+                                let _ = ws_input_ev_sender
+                                    .send(input::websocket::Loop::Shutdown(ws_tx))
+                                    .await;
+                                let _ = ws_rx.await;
+                            }
 
                             // Initiate shutdown of the loopback handler.
                             let (loopback_tx, loopback_rx) = oneshot::channel();
@@ -324,41 +326,58 @@ async fn start_loopback_handle_loop(
     ev_sender: mpsc::Sender<output::loopback::Loop<WebSocketReceiver, WebSocketSender>>,
     mut ev_receiver: mpsc::Receiver<input::loopback::Loop>,
 ) {
+    let mut connect_task: Option<task::JoinHandle<()>> = None;
+
     while let Some(event) = ev_receiver.recv().await {
         match event {
             input::loopback::Loop::ConnectSocket { addr, timeout } => {
-                let (ws_stream, _) = loop {
-                    match tokio_tungstenite::connect_async(addr.clone()).await {
-                        Ok(ws_stream) => {
-                            debug!("Successfully connected to socket with addr: {}", addr);
+                if let Some(task) = connect_task {
+                    task.abort();
+                }
 
-                            break ws_stream;
-                        }
-                        Err(err) => {
-                            debug!("Error with connect to socket: {}", err);
+                connect_task = Some(tokio::spawn({
+                    let ev_sender = ev_sender.clone();
 
-                            if let Some(timeout) = timeout {
-                                tokio::time::sleep(timeout).await;
+                    async move {
+                        let (ws_stream, _) = loop {
+                            match tokio_tungstenite::connect_async(addr.clone()).await {
+                                Ok(ws_stream) => {
+                                    debug!("Successfully connected to socket with addr: {}", addr);
+
+                                    break ws_stream;
+                                }
+                                Err(err) => {
+                                    debug!("Error with connect to socket: {}", err);
+
+                                    if let Some(timeout) = timeout {
+                                        tokio::time::sleep(timeout).await;
+                                    }
+                                }
                             }
-                        }
+                        };
+
+                        let (ws_sender, ws_receiver) = ws_stream.split();
+
+                        // Notify the main loop of the successful connection.
+                        let _ = ev_sender
+                            .send(output::loopback::Loop::SocketConnected {
+                                read: ws_receiver,
+                                write: ws_sender,
+                            })
+                            .await;
                     }
-                };
-
-                let (ws_sender, ws_receiver) = ws_stream.split();
-
-                // Notify the main loop of the successful connection.
-                let _ = ev_sender
-                    .send(output::loopback::Loop::SocketConnected {
-                        read: ws_receiver,
-                        write: ws_sender,
-                    })
-                    .await;
+                }));
             }
             input::loopback::Loop::Shutdown(sender) => {
                 debug!("start_loopback_handle_loop shutdown received");
 
+                if let Some(task) = connect_task {
+                    task.abort();
+                }
+
                 // Confirm shutdown to the caller.
                 let _ = sender.send(());
+                break;
             }
         }
     }
