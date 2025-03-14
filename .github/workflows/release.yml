@@ -2,23 +2,23 @@ name: Build and Publish Rust Application
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - '**'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
           prefix-key: ${{ matrix.target }}
 
@@ -38,65 +38,51 @@ jobs:
       - name: Build project
         run: cross build --release --target ${{ matrix.target }}
 
+      - name: Archive artifact
+        run: zip -j auth-proxy-gl-${{ matrix.target }}.zip target/${{ matrix.target }}/release/auth-proxy-gl
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-build
-          path: target/${{ matrix.target }}/release/auth-proxy-gl
-
-  check_merge:
-    name: Check if commit is a merge into master
-    runs-on: ubuntu-latest
-    outputs:
-      is_merge: ${{ steps.check.outputs.is_merge }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check if commit is a merge into master
-        id: check
-        run: |
-          if [ "${{ github.ref }}" = "refs/heads/master" ] && git rev-parse ${{ github.sha }}^2 >/dev/null 2>&1; then
-            echo "is_merge=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_merge=false" >> $GITHUB_OUTPUT
-          fi
+          path: auth-proxy-gl-${{ matrix.target }}.zip
 
   release:
-    needs: [ check_merge, build ]
-    if: needs.check_merge.outputs.is_merge == 'true'
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        with:
-          draft: false
-          prerelease: false
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          body: "Automated release for version ${{ github.ref_name }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Download x86_64 Artifact
         uses: actions/download-artifact@v4
         with:
           name: x86_64-unknown-linux-gnu-build
-          path: $GITHUB_WORKSPACE/artifacts
+          path: artifacts/x86_64
 
       - name: Download aarch64 Artifact
         uses: actions/download-artifact@v4
         with:
           name: aarch64-unknown-linux-gnu-build
+          path: artifacts/aarch64
 
-      - name: Upload Linux (x86-64) Artifact
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          draft: false
+          # Если ветка Dev — pre-release, иначе обычный релиз
+          prerelease: ${{ github.ref == 'refs/heads/Dev' }}
+          body: "Automated release for version ${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux (x86_64) Artifact
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: $GITHUB_WORKSPACE/artifacts/x86_64-unknown-linux-gnu-build.zip
-          asset_name: auth-proxy-gl-x86_64-unknown-linux-gnu
-          asset_content_type: application/octet-stream
+          asset_path: artifacts/x86_64/auth-proxy-gl-x86_64-unknown-linux-gnu.zip
+          asset_name: auth-proxy-gl-x86_64-unknown-linux-gnu.zip
+          asset_content_type: application/zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -104,8 +90,8 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: $GITHUB_WORKSPACE/artifacts/aarch64-unknown-linux-gnu-build.zip
-          asset_name: auth-proxy-gl-aarch64-unknown-linux-gnu
-          asset_content_type: application/octet-stream
+          asset_path: artifacts/aarch64/auth-proxy-gl-aarch64-unknown-linux-gnu.zip
+          asset_name: auth-proxy-gl-aarch64-unknown-linux-gnu.zip
+          asset_content_type: application/zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
