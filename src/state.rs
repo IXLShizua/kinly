@@ -1,17 +1,19 @@
 use crate::{config, launcher};
-use std::time::Duration;
-use std::{collections::HashMap, sync::Arc};
+use openssl::{pkey, rsa};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Clone)]
 pub struct State {
+    pub config: Arc<config::Config>,
     pub key_pair: Arc<KeyPair>,
-    pub servers: Arc<HashMap<String, config::Server>>,
+    pub data_dir: PathBuf,
+    pub servers: Arc<HashMap<String, config::server::Server>>,
     pub sockets: Arc<Sockets>,
 }
 
 pub struct KeyPair {
+    pub rsa: rsa::Rsa<pkey::Private>,
     pub public: String,
-    pub private: String,
 }
 
 #[derive(Default)]
@@ -20,7 +22,7 @@ pub struct Sockets {
 }
 
 impl Sockets {
-    pub async fn from_servers(servers: &HashMap<String, config::Server>) -> Sockets {
+    pub async fn from_servers(servers: &HashMap<String, config::server::Server>) -> Sockets {
         let mut sockets = Sockets {
             inner: HashMap::new(),
         };

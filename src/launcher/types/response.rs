@@ -145,7 +145,7 @@ pub mod base {
 
             #[derive(Serialize, Deserialize, Debug)]
             pub struct Skin {
-                pub url: String,
+                pub url: url::Url,
                 pub digest: String,
 
                 #[serde(skip_serializing_if = "Option::is_none")]
@@ -166,7 +166,7 @@ pub mod base {
                     #[serde(rename = "slim")]
                     Slim,
 
-                    #[serde(rename = "default")]
+                    #[serde(other)]
                     #[default]
                     Default,
                 }
@@ -178,7 +178,8 @@ pub mod base {
 
             #[derive(Serialize, Deserialize, Debug)]
             pub struct Cape {
-                pub url: String,
+                pub url: url::Url,
+                pub digest: String,
             }
         }
     }
@@ -191,6 +192,6 @@ pub mod batch_profiles_by_usernames {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct BatchProfilesByUsernames {
         #[serde(rename = "playerProfiles")]
-        pub player_profiles: Vec<profile::Profile>,
+        pub player_profiles: Vec<Option<profile::Profile>>,
     }
 }

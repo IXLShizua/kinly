@@ -6,8 +6,7 @@ use crate::{
     config,
     launcher::types::{request, response},
 };
-use std::time::Duration;
-use std::{collections::HashMap, future::Future};
+use std::{collections::HashMap, future::Future, time::Duration};
 use uuid::Uuid;
 
 macro_rules! extract_response {
@@ -135,7 +134,7 @@ impl Api {
 
     pub async fn with_token_restore<T, F, Fut>(
         &self,
-        server: &config::Server,
+        server: &config::server::Server,
         action: F,
     ) -> Result<T, error::Error>
     where
