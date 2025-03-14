@@ -7,8 +7,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::{on, MethodFilter},
-    Json,
-    Router,
+    Json, Router,
 };
 
 pub fn router() -> Router<state::State> {
@@ -42,10 +41,12 @@ async fn profiles_by_usernames(
     let response = profiles
         .player_profiles
         .into_iter()
-        .map(|profile| profile::Profile {
-            id: profile.uuid.simple().to_string(),
-            name: profile.username,
-            properties: Vec::new(),
+        .filter_map(|profile| {
+            profile.map(|profile| profile::Profile {
+                id: profile.uuid.simple().to_string(),
+                name: profile.username,
+                properties: Vec::new(),
+            })
         })
         .collect::<Vec<_>>();
 
