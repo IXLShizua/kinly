@@ -2,6 +2,7 @@
 
 .idea
 config.json
+data
 
 private.pem
 public.pem
