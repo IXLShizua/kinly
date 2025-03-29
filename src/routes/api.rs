@@ -7,7 +7,8 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::{on, MethodFilter},
-    Json, Router,
+    Json,
+    Router,
 };
 
 pub fn router() -> Router<state::State> {

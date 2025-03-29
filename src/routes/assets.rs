@@ -1,8 +1,7 @@
 use crate::state;
 use axum::{
-    body::Body,
     extract::{Path, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    http::{header, HeaderValue, StatusCode},
     response,
     response::IntoResponse,
     routing::{on, MethodFilter},
@@ -10,7 +9,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::fs;
-use tracing::{error, info};
 
 pub fn router() -> Router<state::State> {
     Router::new().route("/:encoded", on(MethodFilter::GET, asset_by_hash))

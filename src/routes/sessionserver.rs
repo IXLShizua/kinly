@@ -1,7 +1,5 @@
 use crate::{
-    config,
     config::{server::experimental::rewrite::Rewrite, Meta},
-    injector,
     injector::types::{
         request,
         response::{
