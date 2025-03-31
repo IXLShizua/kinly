@@ -52,22 +52,22 @@
   "servers": {
     "MyMinecraftServer": {
       "api": "wss://launcher.example.com/api",
-      "token": "eyJhbGciOiJFUzI1NiJ9..."
-    },
-    "meta": {
-      "assets": {
-        "skins": [
-          "skins.example.com"
-        ],
-        "capes": [
-          "capes.example.com"
-        ]
-      }
-    },
-    "experimental": {
-      "rewrite": {
-        "skins": false,
-        "capes": false
+      "token": "eyJhbGciOiJFUzI1NiJ9...",
+      "meta": {
+        "assets": {
+          "skins": [
+            "skins.example.com"
+          ],
+          "capes": [
+            "capes.example.com"
+          ]
+        }
+      },
+      "experimental": {
+        "rewrite": {
+          "skins": false,
+          "capes": false
+        }
       }
     }
   }
