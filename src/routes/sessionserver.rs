@@ -211,7 +211,7 @@ fn map_profile(
             .private_encrypt(encoded.as_bytes(), &mut buf, Padding::PKCS1)
             .unwrap();
 
-        Some(base64::encode_block(&buf[..len - 1]))
+        Some(base64::encode_block(&buf[..len]))
     } else {
         None
     };
