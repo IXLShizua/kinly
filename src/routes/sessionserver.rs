@@ -20,8 +20,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::{on, MethodFilter},
-    Json,
-    Router,
+    Json, Router,
 };
 use openssl::{base64, pkey, rsa, rsa::Padding};
 use std::time::{self, SystemTime, UNIX_EPOCH};
@@ -205,17 +204,16 @@ fn map_profile(
     let serialized_textures = serde_json::to_string(&textures).unwrap();
 
     let encoded = base64::encode_block(serialized_textures.as_bytes());
-    let encoded_signature = match signed {
-        true => {
-            let mut bytes = vec![0u8; encoded.len()];
-            let _ = rsa
-                .private_encrypt(encoded.as_bytes(), &mut bytes, Padding::PKCS1)
-                .unwrap();
-            let encoded_encrypted = base64::encode_block(&bytes);
+    let encoded_signature = if signed {
+        let mut buf = vec![0u8; rsa.size() as usize];
 
-            Some(encoded_encrypted)
-        }
-        false => None,
+        let len = rsa
+            .private_encrypt(encoded.as_bytes(), &mut buf, Padding::PKCS1)
+            .unwrap();
+
+        Some(base64::encode_block(&buf[..len]))
+    } else {
+        None
     };
 
     profile::Profile {
