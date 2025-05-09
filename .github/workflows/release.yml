@@ -67,11 +67,16 @@ jobs:
           name: aarch64-unknown-linux-gnu-build
           path: artifacts/aarch64
 
+      - name: Shorten commit SHA
+        id: sha
+        run: |
+          echo "short_sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
       - name: Create / update dev release
         uses: ncipollo/release-action@v1
         with:
           tag: dev
-          name: "dev-${{ github.sha::8 }}"
+          name: "dev-${{ steps.sha.outputs.short_sha }}"
           prerelease: true
           allowUpdates: true
           artifacts: |
