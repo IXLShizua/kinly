@@ -58,15 +58,11 @@ jobs:
             (strip "$BIN" 2>/dev/null || true)
           fi
 
-      - name: Shorten commit SHA
-        id: sha
-        run: echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
-
-      - name: Package zip
+      - name: Package zip (fixed names)
         run: |
           set -euo pipefail
           BIN="target/${{ matrix.target }}/release/${{ env.BIN_NAME }}"
-          OUT="dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip"
+          OUT="dist/${{ env.BIN_NAME }}-${{ matrix.target }}.zip"
           test -f "$BIN" || { echo "Binary not found: $BIN"; exit 1; }
           mkdir -p dist
           zip -9 -j "$OUT" "$BIN"
@@ -84,8 +80,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: |
-            dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip
-            dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip.sha256
+            dist/${{ env.BIN_NAME }}-${{ matrix.target }}.zip
+            dist/${{ env.BIN_NAME }}-${{ matrix.target }}.zip.sha256
 
   release:
     name: Create/Update dev release
@@ -102,10 +98,6 @@ jobs:
           merge-multiple: true
           path: artifacts
 
-      - name: Shorten commit SHA
-        id: sha
-        run: echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
-
       - name: List artifacts (debug)
         run: |
           echo "Workspace: $GITHUB_WORKSPACE"
@@ -117,16 +109,19 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: dev
-          name: "dev-${{ steps.sha.outputs.short_sha }}"
+          name: "dev"
           prerelease: true
           allowUpdates: true
-          replacesArtifacts: true
+          replacesArtifacts: true          # перезаписывает ассеты с теми же именами
           artifactErrorsFailBuild: true
-          # Глоб по всем подпапкам, без пробелов:
-          artifacts: artifacts/**/*.zip,artifacts/**/*.zip.sha256
+          artifacts: |
+            artifacts/**/kinly-x86_64-unknown-linux-gnu.zip,
+            artifacts/**/kinly-x86_64-unknown-linux-gnu.zip.sha256,
+            artifacts/**/kinly-aarch64-unknown-linux-gnu.zip,
+            artifacts/**/kinly-aarch64-unknown-linux-gnu.zip.sha256
           artifactContentType: application/zip
           body: |
-            Automated dev release for commit ${{ github.sha }}.
+            Automated dev release for ${{ github.sha }}.
             Targets:
             - x86_64-unknown-linux-gnu
             - aarch64-unknown-linux-gnu
