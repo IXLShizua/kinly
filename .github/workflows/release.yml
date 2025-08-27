@@ -3,18 +3,65 @@ name: Build and Publish Rust Application
 on:
   push:
     branches:
-      - dev     # workflow запускается только на dev
+      - dev
+  pull_request:
+    branches:
+      - dev
+  workflow_dispatch:
+
+# Не запускать параллельно на одной и той же ветке/коммите
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: kinly
 
 jobs:
-  build:
+  check:
+    name: Lint & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --all-features --locked
+
+  build:
+    name: Build (matrix)
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
+    permissions:
+      contents: read
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Cache Rust dependencies
@@ -28,49 +75,71 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
 
-      - name: Install Cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+      # Быстрый установщик cross (собирает бинарники в контейнере)
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
 
-      - name: Install native compiler for aarch64
-        if: ${{ matrix.target == 'aarch64-unknown-linux-gnu' }}
+      # Сборка Release (если в Cargo.toml нет strip=true, попробуем post-strip)
+      - name: Build release
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Try strip binary (best-effort)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Build release binary
-        run: cross build --release --target ${{ matrix.target }}
-
-      - name: Zip the binary
-        run: |
-          zip -j kinly-${{ matrix.target }}.zip \
-            target/${{ matrix.target }}/release/kinly
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}-build
-          path: kinly-${{ matrix.target }}.zip
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download x86_64 build
-        uses: actions/download-artifact@v4
-        with:
-          name: x86_64-unknown-linux-gnu-build
-          path: artifacts/x86_64
-
-      - name: Download aarch64 build
-        uses: actions/download-artifact@v4
-        with:
-          name: aarch64-unknown-linux-gnu-build
-          path: artifacts/aarch64
+          BIN=target/${{ matrix.target }}/release/${{ env.BIN_NAME }}
+          if [ -f "$BIN" ]; then
+            (strip "$BIN" 2>/dev/null || true)
+          fi
 
       - name: Shorten commit SHA
         id: sha
+        run: echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Package zip
         run: |
-          echo "short_sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          mkdir -p dist
+          BIN=target/${{ matrix.target }}/release/${{ env.BIN_NAME }}
+          OUT=dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip
+          # Положим бинарник как 'kinly' без подкаталогов
+          (cd "$(dirname "$BIN")" && zip -9 -j "$PWD/../../../../$OUT" "${{ env.BIN_NAME }}")
+          echo "PKG=$OUT" >> "$GITHUB_ENV"
+
+      - name: Generate SHA256 checksums
+        run: |
+          shasum -a 256 "$PKG" > "$PKG.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-build
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip
+            dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip.sha256
+
+  release:
+    name: Create/Update dev release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-build"
+          merge-multiple: true
+          path: artifacts
+
+      - name: Shorten commit SHA
+        id: sha
+        run: echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: List artifacts (debug)
+        run: ls -laR artifacts
 
       - name: Create / update dev release
         uses: ncipollo/release-action@v1
@@ -79,8 +148,17 @@ jobs:
           name: "dev-${{ steps.sha.outputs.short_sha }}"
           prerelease: true
           allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
           artifacts: |
-            artifacts/x86_64/kinly-x86_64-unknown-linux-gnu.zip,
-            artifacts/aarch64/kinly-aarch64-unknown-linux-gnu.zip
+            artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip,
+            artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip.sha256,
+            artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip,
+            artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip.sha256
           artifactContentType: application/zip
+          body: |
+            Automated dev release for commit ${{ github.sha }}.
+            Targets:
+            - x86_64-unknown-linux-gnu
+            - aarch64-unknown-linux-gnu
           token: ${{ secrets.GITHUB_TOKEN }}
