@@ -2,7 +2,14 @@ use clap::Parser;
 use figment::{providers, providers::Format};
 use kinly::{args, config, config::server::meta::Assets, http, http::state, launchserver};
 use openssl::{pkey, rsa};
-use std::{collections::HashMap, error::Error, fs, io::Write, os::unix::fs::OpenOptionsExt};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs,
+    io::Write,
+    os::unix::fs::OpenOptionsExt,
+    time::Duration,
+};
 use tokio::net;
 use tracing::{info, Level};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -96,7 +103,7 @@ async fn _main(
                         values
                     }
                 },
-                socket: launchserver::Client::new(server.token, server.api, None),
+                socket: launchserver::Client::new(server.token, server.api, Duration::from_secs(5)),
             },
         )
     });

@@ -41,7 +41,7 @@ pub async fn player_has_joined(
         ip: _,
     }): Query<PlayerHasJoinedQuery>,
 ) -> impl IntoResponse {
-    let Some(server) = state.servers().get(&server_id) else {
+    let Some(server) = state.servers().get(&path_server_id) else {
         return StatusCode::NO_CONTENT.into_response();
     };
 

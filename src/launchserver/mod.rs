@@ -124,41 +124,35 @@ impl Client {
         &self,
         request: request::any::Any,
     ) -> Result<response::any::Kind, error::Error> {
-        let response = self
-            .socket
-            .send_request(request.clone())
-            .map_err(error::Error::from)
-            .await;
+        let response = self.socket.send_request(request.clone()).await;
 
         match response {
-            Ok(result) => Ok(result),
-            Err(err) => match err {
-                error::Error::UnexpectedResponse(response::any::Kind::Error(
-                    response::error::Error {
-                        kind: response::error::Kind::PermissionsDenied,
-                    },
-                )) => {
-                    let res = self
-                        .restore_token(
-                            request::restore_token::Pair {
-                                name: "checkServer".to_string(),
-                                value: self.token.clone(),
-                            },
-                            false,
-                        )
-                        .await;
+            Ok(
+                kind @ response::any::Kind::Error(response::error::Error {
+                    kind: response::error::Kind::PermissionsDenied,
+                }),
+            ) => {
+                let res = self
+                    .restore_token(
+                        request::restore_token::Pair {
+                            name: "checkServer".to_string(),
+                            value: self.token.clone(),
+                        },
+                        false,
+                    )
+                    .await;
 
-                    if res.map(|v| v.invalid_tokens.is_empty()).unwrap_or(false) {
-                        self.socket
-                            .send_request(request)
-                            .map_err(|err| err.into())
-                            .await
-                    } else {
-                        Err(err)
-                    }
+                if res.map(|v| v.invalid_tokens.is_empty()).unwrap_or(false) {
+                    self.socket
+                        .send_request(request)
+                        .map_err(|err| err.into())
+                        .await
+                } else {
+                    Err(error::Error::UnexpectedResponse(kind))
                 }
-                _ => Err(err),
-            },
+            }
+            Ok(result) => Ok(result),
+            other => other.map_err(|err| err.into()),
         }
     }
 
