@@ -107,7 +107,11 @@ jobs:
         run: echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
 
       - name: List artifacts (debug)
-        run: ls -laR artifacts
+        run: |
+          echo "Workspace: $GITHUB_WORKSPACE"
+          ls -laR artifacts || true
+          echo "Found files:"
+          find artifacts -type f -maxdepth 4 -print || true
 
       - name: Create / update dev release
         uses: ncipollo/release-action@v1
@@ -118,9 +122,8 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           artifactErrorsFailBuild: true
-          # ВАЖНО: файлы лежат в artifacts/dist/
-          artifacts: |
-            artifacts/dist/*.zip,artifacts/dist/*.zip.sha256
+          # Глоб по всем подпапкам, без пробелов:
+          artifacts: artifacts/**/*.zip,artifacts/**/*.zip.sha256
           artifactContentType: application/zip
           body: |
             Automated dev release for commit ${{ github.sha }}.
