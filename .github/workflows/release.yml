@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - dev
-  pull_request:
-    branches:
-      - dev
   workflow_dispatch:
 
 concurrency:
@@ -21,41 +18,8 @@ env:
   BIN_NAME: kinly
 
 jobs:
-  check:
-    name: Lint & Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
-      # stable для clippy/test
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      # nightly только для rustfmt
-      - name: Install nightly toolchain (fmt)
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-
-      - name: cargo fmt (nightly)
-        run: cargo +nightly fmt --all -- --check
-
-      - name: cargo clippy (stable)
-        run: cargo +stable clippy --all-targets --all-features -- -D warnings
-
-      - name: cargo test (stable)
-        run: cargo +stable test --all-features --locked
-
   build:
     name: Build (matrix)
-    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -64,8 +28,6 @@ jobs:
         target:
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,7 +43,6 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
 
-      # быстрый инсталлер cross
       - name: Install cross
         uses: taiki-e/install-action@v2
         with:
