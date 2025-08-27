@@ -12,7 +12,7 @@ pub struct Response<T: Serialize + DeserializeOwned> {
 }
 
 pub mod any {
-    use crate::launcher::types::response::{
+    use crate::launchserver::types::response::{
         batch_profiles_by_usernames,
         check_server,
         error,
@@ -103,7 +103,7 @@ pub mod check_server {
 }
 
 pub mod get_profile_by_uuid {
-    use crate::launcher::types::response::base;
+    use crate::launchserver::types::response::base;
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -114,7 +114,7 @@ pub mod get_profile_by_uuid {
 }
 
 pub mod get_profile_by_username {
-    use crate::launcher::types::response::base;
+    use crate::launchserver::types::response::base;
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -191,7 +191,7 @@ pub mod base {
 }
 
 pub mod batch_profiles_by_usernames {
-    use crate::launcher::types::response::base::profile;
+    use crate::launchserver::types::response::base::profile;
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Debug)]

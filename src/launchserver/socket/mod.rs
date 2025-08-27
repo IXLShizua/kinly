@@ -3,7 +3,7 @@ mod events;
 
 pub use error::*;
 
-use crate::launcher::{
+use crate::launchserver::{
     socket::events::{input, output},
     types::{request, response},
 };
