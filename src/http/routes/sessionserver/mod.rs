@@ -17,7 +17,7 @@ pub fn router() -> Router<ClonableState> {
                 on(MethodFilter::GET, player_has_joined::player_has_joined),
             )
             .route(
-                "/profile/{uuid}",
+                "/profile/{profile_id}",
                 on(MethodFilter::GET, get_profile_by_uuid::get_profile_by_uuid),
             ),
     )
