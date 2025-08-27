@@ -64,14 +64,17 @@ jobs:
 
       - name: Package zip
         run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/${{ env.BIN_NAME }}"
+          OUT="dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip"
+          test -f "$BIN" || { echo "Binary not found: $BIN"; exit 1; }
           mkdir -p dist
-          BIN=target/${{ matrix.target }}/release/${{ env.BIN_NAME }}
-          OUT=dist/${{ env.BIN_NAME }}-${{ matrix.target }}-${{ steps.sha.outputs.short_sha }}.zip
-          (cd "$(dirname "$BIN")" && zip -9 -j "$PWD/../../../../$OUT" "${{ env.BIN_NAME }}")
+          zip -9 -j "$OUT" "$BIN"
           echo "PKG=$OUT" >> "$GITHUB_ENV"
 
       - name: Generate SHA256 checksums
         run: |
+          set -euo pipefail
           shasum -a 256 "$PKG" > "$PKG".sha256
 
       - name: Upload artifacts
