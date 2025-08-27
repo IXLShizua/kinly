@@ -1,6 +1,6 @@
-use kinly::{args, config, config::server::meta::Assets, http, http::state, launchserver};
 use clap::Parser;
 use figment::{providers, providers::Format};
+use kinly::{args, config, config::server::meta::Assets, http, http::state, launchserver};
 use openssl::{pkey, rsa};
 use std::{collections::HashMap, error::Error, fs, io::Write, os::unix::fs::OpenOptionsExt};
 use tokio::net;
