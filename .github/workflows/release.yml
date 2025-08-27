@@ -1,128 +1,84 @@
-name: Build and Publish Rust Application
+name: Build and publish dev prelease
 
 on:
   push:
-    branches:
-      - dev
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
+    branches: [ "dev" ]
 
 env:
   CARGO_TERM_COLOR: always
-  BIN_NAME: kinly
 
 jobs:
   build:
-    name: Build (matrix)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     strategy:
-      fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ matrix.target }}
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: ${{ matrix.target }}
 
-      - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        target: ${{ matrix.target }}
 
-      - name: Install cross
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cross
+    - name: Install Cross
+      run: cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Build release
-        run: cross build --release --locked --target ${{ matrix.target }}
+    - name: Install native compiler for aarch64
+      if: ${{ matrix.target == 'aarch64-unknown-linux-gnu' }}
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+    
+    - name: Release Build
+      run: cargo build --release --target ${{ matrix.target }} --verbose
 
-      - name: Try strip binary (best-effort)
-        run: |
-          BIN=target/${{ matrix.target }}/release/${{ env.BIN_NAME }}
-          if [ -f "$BIN" ]; then
-            (strip "$BIN" 2>/dev/null || true)
-          fi
+    - name: Upload release artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: kinly-${{ matrix.target }}
+        path: target/${{ matrix.target }}/kinly
 
-      - name: Package zip (fixed names)
-        run: |
-          set -euo pipefail
-          BIN="target/${{ matrix.target }}/release/${{ env.BIN_NAME }}"
-          OUT="dist/${{ env.BIN_NAME }}-${{ matrix.target }}.zip"
-          test -f "$BIN" || { echo "Binary not found: $BIN"; exit 1; }
-          mkdir -p dist
-          zip -9 -j "$OUT" "$BIN"
-          echo "PKG=$OUT" >> "$GITHUB_ENV"
-
-      - name: Generate SHA256 checksums
-        run: |
-          set -euo pipefail
-          shasum -a 256 "$PKG" > "$PKG".sha256
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}-build
-          if-no-files-found: error
-          retention-days: 14
-          path: |
-            dist/${{ env.BIN_NAME }}-${{ matrix.target }}.zip
-            dist/${{ env.BIN_NAME }}-${{ matrix.target }}.zip.sha256
-
-  release:
-    name: Create/Update dev release
+  publish:
+    name: Pre-release per commit
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     steps:
+      - name: Compute variables
+        id: vars
+        run: |
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "full_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: "*-build"
+          pattern: "kinly-*"
           merge-multiple: true
           path: artifacts
 
-      - name: List artifacts (debug)
-        run: |
-          echo "Workspace: $GITHUB_WORKSPACE"
-          ls -laR artifacts || true
-          echo "Found files:"
-          find artifacts -type f -maxdepth 4 -print || true
-
-      - name: Create / update dev release
+      - name: Create pre-release
         uses: ncipollo/release-action@v1
         with:
-          tag: dev
-          name: "dev"
+          tag: dev-${{ steps.vars.outputs.short_sha }}
+          name: dev-${{ steps.vars.outputs.short_sha }}
           prerelease: true
           allowUpdates: true
-          replacesArtifacts: true          # перезаписывает ассеты с теми же именами
+          replacesArtifacts: true
           artifactErrorsFailBuild: true
-          artifacts: |
-            artifacts/**/kinly-x86_64-unknown-linux-gnu.zip,
-            artifacts/**/kinly-x86_64-unknown-linux-gnu.zip.sha256,
-            artifacts/**/kinly-aarch64-unknown-linux-gnu.zip,
-            artifacts/**/kinly-aarch64-unknown-linux-gnu.zip.sha256
-          artifactContentType: application/zip
+          artifacts: artifacts/**/kinly-*
           body: |
-            Automated dev release for ${{ github.sha }}.
-            Targets:
-            - x86_64-unknown-linux-gnu
-            - aarch64-unknown-linux-gnu
+            Automated pre-release for commit ${{ steps.vars.outputs.full_sha }}.
           token: ${{ secrets.GITHUB_TOKEN }}
