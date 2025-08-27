@@ -86,27 +86,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "auth-proxy-gl"
-version = "0.2.10"
-dependencies = [
- "axum",
- "clap",
- "dashmap",
- "figment",
- "futures",
- "futures-util",
- "openssl",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -796,6 +775,27 @@ checksum = "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "kinly"
+version = "0.2.10"
+dependencies = [
+ "axum",
+ "clap",
+ "dashmap",
+ "figment",
+ "futures",
+ "futures-util",
+ "openssl",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
 ]
 
 [[package]]

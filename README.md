@@ -1,6 +1,6 @@
-# Auth-Proxy-GL
+# Kinly
 
-**Auth-Proxy-GL** — прокси для взаимодействия между [Authlib Injector](https://github.com/yushijinhun/authlib-injector/) и [Gravit Launcher](https://gravitlauncher.com/).
+**Kinly** — прокси для взаимодействия между [Authlib Injector](https://github.com/yushijinhun/authlib-injector/) и [Gravit Launcher](https://gravitlauncher.com/).
 
 ---
 

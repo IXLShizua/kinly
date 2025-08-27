@@ -54,7 +54,7 @@ async fn root(
     let response = RootResponse {
         meta: meta::Meta {
             server_name: Some(server_id),
-            implementation_name: Some("Auth-Proxy-GL".to_string()),
+            implementation_name: Some("Kinly".to_string()),
             implementation_version: None,
         },
         skin_domains: server.assets.clone(),

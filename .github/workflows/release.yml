@@ -42,14 +42,14 @@ jobs:
 
       - name: Zip the binary
         run: |
-          zip -j auth-proxy-gl-${{ matrix.target }}.zip \
-            target/${{ matrix.target }}/release/auth-proxy-gl
+          zip -j kinly-${{ matrix.target }}.zip \
+            target/${{ matrix.target }}/release/kinly
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-build
-          path: auth-proxy-gl-${{ matrix.target }}.zip
+          path: kinly-${{ matrix.target }}.zip
 
   release:
     needs: build
@@ -80,7 +80,7 @@ jobs:
           prerelease: true
           allowUpdates: true
           artifacts: |
-            artifacts/x86_64/auth-proxy-gl-x86_64-unknown-linux-gnu.zip,
-            artifacts/aarch64/auth-proxy-gl-aarch64-unknown-linux-gnu.zip
+            artifacts/x86_64/kinly-x86_64-unknown-linux-gnu.zip,
+            artifacts/aarch64/kinly-aarch64-unknown-linux-gnu.zip
           artifactContentType: application/zip
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -2,7 +2,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "auth-proxy-gl", version)]
+#[command(name = "kinly", version)]
 pub struct Args {
     #[arg(
         default_value = "config.json",

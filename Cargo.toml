@@ -1,5 +1,5 @@
 [package]
-name = "auth-proxy-gl"
+name = "kinly"
 version = "0.2.10"
 authors = ["IXLShizua"]
 edition = "2021"
