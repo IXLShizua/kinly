@@ -1,4 +1,4 @@
-use auth_proxy_gl::{args, config, config::server::meta::Assets, http, http::state, launchserver};
+use kinly::{args, config, config::server::meta::Assets, http, http::state, launchserver};
 use clap::Parser;
 use figment::{providers, providers::Format};
 use openssl::{pkey, rsa};
