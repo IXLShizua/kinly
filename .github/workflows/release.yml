@@ -118,11 +118,9 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           artifactErrorsFailBuild: true
+          # ВАЖНО: файлы лежат в artifacts/dist/
           artifacts: |
-            artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip,
-            artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip.sha256,
-            artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip,
-            artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-gnu-${{ steps.sha.outputs.short_sha }}.zip.sha256
+            artifacts/dist/*.zip,artifacts/dist/*.zip.sha256
           artifactContentType: application/zip
           body: |
             Automated dev release for commit ${{ github.sha }}.
