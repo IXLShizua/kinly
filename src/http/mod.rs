@@ -14,7 +14,7 @@ pub async fn init(listener: net::TcpListener, state: state::State) -> Result<(),
 
     let router = Router::new()
         .nest(
-            "/:server_id",
+            "/{server_id}",
             Router::new()
                 .merge(root::router())
                 .nest("/http", api::router())
