@@ -1,37 +1,3 @@
-pub mod root {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct Root {
-        pub meta: meta::Meta,
-
-        #[serde(rename = "skinDomains")]
-        pub skin_domains: Vec<String>,
-
-        #[serde(rename = "signaturePublickey")]
-        pub signature_public_key: String,
-    }
-
-    pub mod meta {
-        use serde::{Deserialize, Serialize};
-
-        #[derive(Serialize, Deserialize, Debug)]
-        pub struct Meta {
-            #[serde(rename = "serverName", skip_serializing_if = "Option::is_none")]
-            pub server_name: Option<String>,
-
-            #[serde(rename = "implementationName", skip_serializing_if = "Option::is_none")]
-            pub implementation_name: Option<String>,
-
-            #[serde(
-                rename = "implementationVersion",
-                skip_serializing_if = "Option::is_none"
-            )]
-            pub implementation_version: Option<String>,
-        }
-    }
-}
-
 pub mod profile {
     use serde::{Deserialize, Serialize};
 

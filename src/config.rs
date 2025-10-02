@@ -1,22 +1,15 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, str::FromStr};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
-    pub api: Api,
-    pub meta: Meta,
-    pub servers: HashMap<String, server::Server>,
+    pub binds: Binds,
+    pub servers: Vec<server::Server>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Api {
-    pub host: String,
+pub struct Binds {
+    pub host: std::net::Ipv4Addr,
     pub port: u16,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Meta {
-    pub public: url::Url,
 }
 
 pub mod server {
@@ -24,10 +17,10 @@ pub mod server {
 
     #[derive(Serialize, Deserialize, Clone, Debug)]
     pub struct Server {
+        pub name: String,
         pub api: url::Url,
         pub token: String,
         pub meta: meta::Meta,
-        pub experimental: Option<experimental::Experimental>,
     }
 
     pub mod meta {
@@ -48,38 +41,18 @@ pub mod server {
             },
         }
     }
-
-    pub mod experimental {
-        use serde::{Deserialize, Serialize};
-
-        #[derive(Serialize, Deserialize, Clone, Debug)]
-        pub struct Experimental {
-            pub rewrite: Option<rewrite::Rewrite>,
-        }
-
-        pub mod rewrite {
-            use serde::{Deserialize, Serialize};
-
-            #[derive(Serialize, Deserialize, Clone, Debug)]
-            #[serde(untagged)]
-            pub enum Rewrite {
-                AllInOne(bool),
-                Separated { skins: bool, capes: bool },
-            }
-        }
-    }
 }
 
-pub fn default() -> Config {
-    Config {
-        api: Api {
-            host: "0.0.0.0".to_string(),
-            port: 10000,
-        },
-        meta: Meta {
-            public: url::Url::from_str("http://0.0.0.0:10000")
-                .expect("The correct url should be parsed"),
-        },
-        servers: HashMap::new(),
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            binds: Binds {
+                host: "0.0.0.0"
+                    .parse()
+                    .expect("The correct host should be parsed"),
+                port: 10000,
+            },
+            servers: Vec::default(),
+        }
     }
 }

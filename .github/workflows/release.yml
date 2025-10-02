@@ -13,40 +13,49 @@ jobs:
     strategy:
       matrix:
         target:
+          #          - x86_64-pc-windows-msvc
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Cache Rust dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        prefix-key: ${{ matrix.target }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Install stable toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        target: ${{ matrix.target }}
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target }}
 
-    - name: Install Cross
-      run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Install Cross
+        run: cargo install cross --locked
 
-    - name: Install native compiler for aarch64
-      if: ${{ matrix.target == 'aarch64-unknown-linux-gnu' }}
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-aarch64-linux-gnu
-    
-    - name: Release Build
-      run: cargo build --release --target ${{ matrix.target }} --verbose
+      - name: Install native compiler for aarch64
+        if: ${{ matrix.target == 'aarch64-unknown-linux-gnu' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
-    - name: Upload release artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: kinly-${{ matrix.target }}
-        path: target/${{ matrix.target }}/kinly
+      #      - name: Release Build (Windows)
+      #        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+      #        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Release Build (Linux)
+        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu' }}
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Normalize artifacts
+        run: cp target/${{ matrix.target }}/release/kinly target/${{ matrix.target }}/release/kinly-${{ matrix.target }}
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinly-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/kinly-${{ matrix.target }}
 
   publish:
     name: Pre-release per commit
@@ -65,9 +74,8 @@ jobs:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: "kinly-*"
-          merge-multiple: true
           path: artifacts
+          merge-multiple: true
 
       - name: Create pre-release
         uses: ncipollo/release-action@v1
@@ -76,9 +84,7 @@ jobs:
           name: dev-${{ steps.vars.outputs.short_sha }}
           prerelease: true
           allowUpdates: true
-          replacesArtifacts: true
-          artifactErrorsFailBuild: true
-          artifacts: artifacts/**/kinly-*
+          artifacts: artifacts/*
           body: |
             Automated pre-release for commit ${{ steps.vars.outputs.full_sha }}.
           token: ${{ secrets.GITHUB_TOKEN }}

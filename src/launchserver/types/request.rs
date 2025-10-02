@@ -1,7 +1,7 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct Request<T: Serialize + DeserializeOwned> {
     #[serde(rename = "requestUUID")]
@@ -12,7 +12,7 @@ pub struct Request<T: Serialize + DeserializeOwned> {
 }
 
 pub mod any {
-    use crate::launcher::types::request::{
+    use crate::launchserver::types::request::{
         batch_profiles_by_usernames,
         check_server,
         get_profile_by_username,
@@ -24,7 +24,7 @@ pub mod any {
 
     pub type Any = Request<Kind>;
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     #[serde(tag = "type")]
     pub enum Kind {
         #[serde(rename = "restore")]
@@ -48,7 +48,7 @@ pub mod restore_token {
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct RestoreToken {
         pub extended: HashMap<String, String>,
 
@@ -65,7 +65,7 @@ pub mod restore_token {
 pub mod check_server {
     use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct CheckServer {
         pub username: String,
 
@@ -84,7 +84,7 @@ pub mod get_profile_by_uuid {
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct GetProfileByUuid {
         pub uuid: Uuid,
     }
@@ -93,7 +93,7 @@ pub mod get_profile_by_uuid {
 pub mod get_profile_by_username {
     use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct GetProfileByUsername {
         pub username: String,
     }
@@ -102,12 +102,12 @@ pub mod get_profile_by_username {
 pub mod batch_profiles_by_usernames {
     use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct BatchProfilesByUsernames {
         pub list: Vec<Entry>,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Entry {
         pub username: String,
     }
