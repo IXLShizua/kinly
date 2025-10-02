@@ -23,6 +23,7 @@ use tokio::{
     net::TcpStream,
     sync::{mpsc, oneshot},
     task,
+    time,
 };
 use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
 use tracing::debug;
@@ -46,6 +47,7 @@ type WebSocketReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>
 pub struct Socket {
     /// Sender to communicate with the actor handling the loop.
     actor_sender: mpsc::Sender<input::Loop>,
+    actor_handle: task::JoinHandle<()>,
 }
 
 impl Socket {
@@ -60,13 +62,16 @@ impl Socket {
     /// A new instance of `Socket`.
     pub fn new(addr: impl Into<url::Url>, timeout: impl Into<Option<Duration>>) -> Socket {
         let (actor_sender, actor_receiver) = mpsc::channel(CAPACITY);
-        tokio::spawn(start_handle_loop(
+        let actor_handle = tokio::spawn(start_handle_loop(
             addr.into(),
             timeout.into(),
             actor_receiver,
         ));
 
-        Socket { actor_sender }
+        Socket {
+            actor_sender,
+            actor_handle,
+        }
     }
 
     /// Sends a request through the WebSocket and awaits a response.
@@ -99,7 +104,8 @@ impl Socket {
         let (tx, rx) = oneshot::channel();
 
         let _ = self.actor_sender.send(input::Loop::Shutdown(tx)).await;
-        let _ = rx.await;
+        let _ = time::timeout(Duration::from_secs(5), rx).await;
+        self.actor_handle.abort();
     }
 }
 
