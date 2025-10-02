@@ -74,7 +74,7 @@ jobs:
           name: dev-${{ steps.vars.outputs.short_sha }}
           prerelease: true
           allowUpdates: true
-          artifacts: artifacts/*
+          artifacts: artifacts/**/*
           body: |
             Automated pre-release for commit ${{ steps.vars.outputs.full_sha }}.
           token: ${{ secrets.GITHUB_TOKEN }}
