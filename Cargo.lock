@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "kinly"
-version = "0.2.10"
+version = "0.4.0"
 dependencies = [
  "axum",
  "clap",
