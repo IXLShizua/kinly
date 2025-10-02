@@ -40,13 +40,13 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Release Build
-        run: cross build --release --target ${{ matrix.target }} --verbose
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: kinly-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/kinly
+          path: target/${{ matrix.target }}/release/kinly:kinly-${{ matrix.target }}
 
   publish:
     name: Pre-release per commit
