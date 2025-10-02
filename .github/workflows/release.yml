@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         target:
-          - x86_64-pc-windows-msvc
+#          - x86_64-pc-windows-msvc
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
 
@@ -40,9 +40,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Release Build (Windows)
-        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
-        run: cargo build --release --target ${{ matrix.target }}
+#      - name: Release Build (Windows)
+#        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+#        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Release Build (Linux)
         if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu' }}
