@@ -12,8 +12,8 @@ use std::{
     time,
 };
 use tokio::net;
-use tracing::{info, Level};
-use tracing_subscriber::{filter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing::{Level, info};
+use tracing_subscriber::{Layer, filter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::registry()
@@ -31,10 +31,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .as_secs();
 
             let file = {
-                if let Err(err) = fs::create_dir("logs") {
-                    if err.kind() != io::ErrorKind::AlreadyExists {
-                        return Err(err.into());
-                    }
+                if let Err(err) = fs::create_dir("logs")
+                    && err.kind() != io::ErrorKind::AlreadyExists
+                {
+                    return Err(err.into());
                 }
 
                 fs::OpenOptions::new()
