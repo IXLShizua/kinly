@@ -223,7 +223,6 @@ async fn start_handle_loop(
                             let Ok(json_request) = serde_json::to_string(&msg.request) else {
                                 continue;
                             };
-                            debug!("Raw request: {}", json_request);
 
                             requests_callbacks.insert(msg.request.id, msg.sender);
 
@@ -280,16 +279,16 @@ async fn start_handle_loop(
                                 Ok((sender, response)) => {
                                     // Send the response back through the oneshot channel.
                                     if sender.send(response.body).is_err() {
-                                        debug!("Failed to send response to channel");
+                                        debug!("failed to send response to channel");
                                     }
                                 }
                                 Err(err) => {
-                                    debug!("Failed to handle incoming message: {:?}", err);
+                                    debug!("failed to handle incoming message: {:?}", err);
                                 }
                             };
                         }
                         output::websocket::Loop::FailedToSend(msg, err) => {
-                            debug!("Failed to send message: {} {}", msg, err);
+                            debug!("failed to send message: {} {}", msg, err);
 
                             not_sent_messages.push_back(msg);
                         }
@@ -343,12 +342,12 @@ async fn start_loopback_handle_loop(
                         let (ws_stream, _) = loop {
                             match tokio_tungstenite::connect_async(addr.clone()).await {
                                 Ok(ws_stream) => {
-                                    debug!("Successfully connected to socket with addr: {}", addr);
+                                    debug!("successfully connected to socket with addr: {}", addr);
 
                                     break ws_stream;
                                 }
                                 Err(err) => {
-                                    debug!("Error with connect to socket: {}", err);
+                                    debug!("error with connect to socket: {}", err);
 
                                     if let Some(timeout) = timeout {
                                         tokio::time::sleep(timeout).await;
@@ -511,6 +510,7 @@ async fn start_handle_outgoing_messages(
                             join_set.join_next().await;
                         }
 
+                        debug!("raw outgoing message: {:?}", msg);
                         if let Err(err) = ws_sender.send(msg.clone()).await {
                             join_set.spawn({
                                 let ev_sender = ev_sender.clone();
@@ -560,7 +560,7 @@ async fn start_handle_incoming_messages(
                             join_set.join_next().await;
                         }
 
-                        debug!("Raw incoming message: {:?}", msg);
+                        debug!("raw incoming message: {:?}", msg);
                         join_set.spawn({
                             let ev_sender = ev_sender.clone();
 
@@ -572,8 +572,8 @@ async fn start_handle_incoming_messages(
                         });
                     },
                     Err(err) => {
-                        debug!("socket receiver error: {}", err);
-                    },
+                        debug!("socket receiver error: {}", err)
+                    }
                 }
             },
             Some(event) = ev_receiver.recv() => {

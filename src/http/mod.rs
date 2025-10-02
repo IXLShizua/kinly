@@ -3,7 +3,7 @@ use axum::Router;
 use futures_util::StreamExt;
 use routes::{api, root, sessionserver};
 use tokio::{io, net, signal};
-use tracing::debug;
+use tracing::info;
 
 pub mod dto;
 mod routes;
@@ -33,7 +33,7 @@ pub async fn init(listener: net::TcpListener, state: state::State) -> Result<(),
                 })
                 .await;
 
-            debug!("Ctrl^C signal received. Quitting.");
+            info!("Ctrl^C signal received. Quitting.");
         })
         .await
 }

@@ -6,22 +6,48 @@ use std::{
     collections::HashMap,
     error::Error,
     fs,
+    io,
     io::Write,
     os::unix::fs::OpenOptionsExt,
-    time::Duration,
+    time,
 };
 use tokio::net;
 use tracing::{info, Level};
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{filter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(Level::INFO.into())
-        .with_env_var("LOG_LEVEL")
-        .from_env()?;
     tracing_subscriber::registry()
-        .with(fmt::layer())
-        .with(env_filter)
+        .with(
+            fmt::layer().with_filter(
+                filter::EnvFilter::builder()
+                    .with_default_directive(Level::INFO.into())
+                    .with_env_var("LOG_LEVEL")
+                    .from_env()?,
+            ),
+        )
+        .with({
+            let timestamp = time::SystemTime::now()
+                .duration_since(time::UNIX_EPOCH)?
+                .as_secs();
+
+            let file = {
+                if let Err(err) = fs::create_dir("logs") {
+                    if err.kind() != io::ErrorKind::AlreadyExists {
+                        return Err(err.into());
+                    }
+                }
+
+                fs::OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open(format!("logs/debug-{}.log", timestamp))?
+            };
+
+            fmt::layer()
+                .with_ansi(false)
+                .with_writer(file)
+                .with_filter(filter::LevelFilter::from_level(Level::DEBUG))
+        })
         .init();
 
     let args = args::Args::parse();
@@ -103,7 +129,11 @@ async fn _main(
                         values
                     }
                 },
-                socket: launchserver::Client::new(server.token, server.api, Duration::from_secs(5)),
+                socket: launchserver::Client::new(
+                    server.token,
+                    server.api,
+                    time::Duration::from_secs(5),
+                ),
             },
         )
     });
