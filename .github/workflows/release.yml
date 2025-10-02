@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         target:
-#          - x86_64-pc-windows-msvc
+          #          - x86_64-pc-windows-msvc
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
 
@@ -40,19 +40,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
-#      - name: Release Build (Windows)
-#        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
-#        run: cargo build --release --target ${{ matrix.target }}
+      #      - name: Release Build (Windows)
+      #        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+      #        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Release Build (Linux)
         if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu' }}
         run: cross build --release --target ${{ matrix.target }}
 
+      - name: Normalize artifacts
+        run: cp target/${{ matrix.target }}/release/kinly target/${{ matrix.target }}/release/kinly-${{ matrix.target }}
+
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: kinly-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/kinly
+          path: target/${{ matrix.target }}/release/kinly-${{ matrix.target }}
 
   publish:
     name: Pre-release per commit
@@ -72,9 +75,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Display structure of downloaded files
-        run: ls -R
 
       - name: Create pre-release
         uses: ncipollo/release-action@v1
