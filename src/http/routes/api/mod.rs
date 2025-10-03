@@ -2,8 +2,8 @@ mod get_profiles_by_usernames;
 
 use crate::http::state::ClonableState;
 use axum::{
-    routing::{on, MethodFilter},
     Router,
+    routing::{MethodFilter, on},
 };
 
 pub fn router() -> Router<ClonableState> {

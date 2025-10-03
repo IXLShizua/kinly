@@ -4,8 +4,8 @@ mod player_has_joined;
 
 use crate::http::state::ClonableState;
 use axum::{
-    routing::{on, MethodFilter},
     Router,
+    routing::{MethodFilter, on},
 };
 
 pub fn router() -> Router<ClonableState> {
