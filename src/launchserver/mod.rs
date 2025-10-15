@@ -19,8 +19,8 @@ macro_rules! extract_response {
 
 pub struct Client {
     token: String,
+    timeout: Duration,
     socket: socket::Socket,
-    request_timeout: Duration,
 }
 
 impl Client {
@@ -37,7 +37,7 @@ impl Client {
 
         Client {
             token: token.into(),
-            request_timeout: options.timeout,
+            timeout: options.timeout,
             socket: socket::Socket::new(addr, options),
         }
     }
@@ -134,7 +134,7 @@ impl Client {
     ) -> Result<response::any::Kind, error::Error> {
         let response = self
             .socket
-            .send_request(request.clone(), self.request_timeout)
+            .send_request(request.clone(), self.timeout)
             .await;
 
         match response {
@@ -155,7 +155,7 @@ impl Client {
 
                 if res.map(|v| v.invalid_tokens.is_empty()).unwrap_or(false) {
                     self.socket
-                        .send_request(request, self.request_timeout)
+                        .send_request(request, self.timeout)
                         .map_err(|err| err.into())
                         .await
                 } else {
@@ -182,7 +182,7 @@ impl Client {
                         need_user_info: user_info,
                     }),
                 },
-                self.request_timeout,
+                self.timeout,
             )
             .await?;
 

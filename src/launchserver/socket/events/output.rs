@@ -9,7 +9,6 @@ pub mod websocket {
 
     pub enum Loop {
         Message(tungstenite::Message),
-        FailedToSend(tungstenite::Message, tungstenite::Error),
         Disconnect,
     }
 

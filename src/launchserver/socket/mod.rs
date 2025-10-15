@@ -9,14 +9,12 @@ use crate::launchserver::{
     socket::events::{input, output},
     types::{request, response},
 };
-use dashmap::DashMap;
 use futures_util::{
     SinkExt,
     StreamExt,
-    TryFutureExt,
     stream::{SplitSink, SplitStream},
 };
-use std::{collections::VecDeque, time::Duration};
+use std::{collections::HashMap, time::Duration};
 use tokio::{
     net::TcpStream,
     sync::{mpsc, oneshot},
@@ -99,17 +97,18 @@ impl Socket {
                 sender: tx,
                 request,
             }))
-            .await?;
+            .await
+            .expect("actor channel is closed");
 
-        match time::timeout(timeout, rx.map_err(Error::from)).await {
-            Ok(v) => v,
-            Err(err) => {
+        match time::timeout(timeout, rx).await {
+            Ok(res) => Ok(res.expect("sender of the callback cannot be closed")),
+            Err(_) => {
                 let _ = self
                     .actor_sender
                     .send(input::Loop::CancelMessage(request_id))
                     .await;
 
-                Err(Error::TimeoutExceeded(err))
+                Err(Error::ResponseNotReceived)
             }
         }
     }
@@ -120,7 +119,9 @@ impl Socket {
 
         let _ = self.actor_sender.send(input::Loop::Shutdown(tx)).await;
         let _ = time::timeout(self.options.timeout, rx).await;
-        self.actor_handle.abort();
+        if !self.actor_handle.is_finished() {
+            self.actor_handle.abort();
+        }
     }
 }
 
@@ -139,10 +140,9 @@ async fn start_handle_loop(
     let addr = addr.into();
     let reconnection_timeout = reconnection_timeout.into();
 
-    // Queue to hold messages that failed to send.
-    let mut not_sent_messages: VecDeque<tungstenite::Message> = VecDeque::new();
     // Map to correlate requests with their response senders using UUIDs.
-    let requests_callbacks: DashMap<Uuid, oneshot::Sender<response::any::Kind>> = DashMap::new();
+    let mut requests_callbacks: HashMap<Uuid, oneshot::Sender<response::any::Kind>> =
+        HashMap::new();
 
     // Channels for WebSocket input and output events.
     let (mut ws_input_ev_sender, mut ws_input_ev_receiver) =
@@ -175,17 +175,6 @@ async fn start_handle_loop(
 
     // Main event loop.
     loop {
-        // Retry sending any messages that previously failed.
-        if !not_sent_messages.is_empty() && ws_is_connected {
-            let Some(message) = not_sent_messages.pop_front() else {
-                continue;
-            };
-
-            let _ = ws_input_ev_sender
-                .send(input::websocket::Loop::Message(message))
-                .await;
-        }
-
         tokio::select! {
             // Handle events from the loopback output (e.g., successful connection)
             Some(event) = loopback_output_ev_receiver.recv() => {
@@ -271,7 +260,7 @@ async fn start_handle_loop(
                             }
                         };
 
-                        let Some((_, sender)) = requests_callbacks.remove(&response.id) else {
+                        let Some(sender) = requests_callbacks.remove(&response.id) else {
                             debug!("failed to find callback with id {}", response.id);
                             continue;
                         };
@@ -280,11 +269,6 @@ async fn start_handle_loop(
                         if sender.send(response.body).is_err() {
                             debug!("failed to send response to channel");
                         }
-                    }
-                    output::websocket::Loop::FailedToSend(msg, err) => {
-                        debug!("failed to send message: {} {}", msg, err);
-
-                        not_sent_messages.push_back(msg);
                     }
                     output::websocket::Loop::Disconnect => {
                         ws_is_connected = false;
@@ -453,6 +437,8 @@ async fn start_ws_handle_loop(
             Some(ws_sender_output_ev) = ws_sender_output_ev_rx.recv() => {
                 match ws_sender_output_ev {
                     output::websocket::sender::Loop::FailedToSend(msg, err) => {
+                        debug!("failed to send message: {} {}", msg, err);
+
                         if matches!(
                             err,
                             tungstenite::Error::ConnectionClosed
@@ -463,8 +449,6 @@ async fn start_ws_handle_loop(
                         ) {
                             let _ = ev_sender.send(output::websocket::Loop::Disconnect).await;
                         }
-
-                        let _ = ev_sender.send(output::websocket::Loop::FailedToSend(msg, err)).await;
                     }
                 }
             }
