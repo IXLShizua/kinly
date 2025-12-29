@@ -53,12 +53,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = args::Args::parse();
 
     if !args.config_path.exists() {
-        let config = config::Config::default();
-        info!(
-            "Config file not found. Saving default with content {:?}.",
-            config
-        );
+        info!("config file not found. saving default");
 
+        let config = config::Config::default();
         let serialized = serde_json::to_string_pretty(&config)?;
         fs::write(&args.config_path, serialized)?;
 
@@ -108,7 +105,7 @@ async fn _main(
 ) -> Result<(), Box<dyn Error>> {
     let addr = std::net::SocketAddr::from((config.binds.host, config.binds.port));
     let listener = net::TcpListener::bind(addr).await?;
-    info!("Proxy listening on address {}", addr);
+    info!("proxy listening on address {}", addr);
 
     let servers = config.servers.into_iter().map(|server| {
         (
