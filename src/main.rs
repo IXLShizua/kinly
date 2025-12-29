@@ -107,34 +107,35 @@ async fn _main(
     let listener = net::TcpListener::bind(addr).await?;
     info!("proxy listening on address {}", addr);
 
-    let servers = config.servers.into_iter().map(|server| {
-        (
-            server.name,
-            state::Server {
-                key_pair: state::KeyPair {
-                    private: private_key.clone(),
-                    public: public_key.clone(),
+    let servers = config
+        .servers
+        .into_iter()
+        .map(|server| {
+            (
+                server.name,
+                state::Server {
+                    key_pair: state::KeyPair {
+                        private: private_key.clone(),
+                        public: public_key.clone(),
+                    },
+                    assets: match server.meta.assets {
+                        Assets::AllInOne(values) => values,
+                        Assets::Separated { mut skins, capes } => {
+                            skins.extend(capes);
+                            skins
+                        }
+                    },
+                    socket: launchserver::Client::new(
+                        server.token,
+                        server.api,
+                        time::Duration::from_secs(5),
+                    ),
                 },
-                assets: match server.meta.assets {
-                    Assets::AllInOne(values) => values,
-                    Assets::Separated { mut skins, capes } => {
-                        skins.extend(capes);
-                        skins
-                    }
-                },
-                socket: launchserver::Client::new(
-                    server.token,
-                    server.api,
-                    time::Duration::from_secs(5),
-                ),
-            },
-        )
-    });
+            )
+        })
+        .collect::<HashMap<_, _>>();
 
-    let state = state::State {
-        servers: HashMap::from_iter(servers),
-    };
-
+    let state = state::State { servers };
     http::init(listener, state).await?;
 
     Ok(())
