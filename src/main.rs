@@ -120,13 +120,9 @@ async fn _main(
                 },
                 assets: match server.meta.assets {
                     Assets::AllInOne(values) => values,
-                    Assets::Separated { skins, capes } => {
-                        let mut values = skins
-                            .into_iter()
-                            .chain(capes.into_iter())
-                            .collect::<Vec<_>>();
-                        values.dedup();
-                        values
+                    Assets::Separated { mut skins, capes } => {
+                        skins.extend(capes);
+                        skins
                     }
                 },
                 socket: launchserver::Client::new(
