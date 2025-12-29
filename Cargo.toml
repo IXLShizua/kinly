@@ -7,7 +7,6 @@ edition = "2024"
 [dependencies]
 axum = "0.8.4"
 clap = { version = "4.5.46", features = ["derive"] }
-dashmap = "6.1.0"
 figment = { version = "0.10.19", features = ["json"] }
 futures = "0.3.31"
 futures-util = "0.3.31"

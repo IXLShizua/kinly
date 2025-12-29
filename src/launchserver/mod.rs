@@ -19,6 +19,7 @@ macro_rules! extract_response {
 
 pub struct Client {
     token: String,
+    timeout: Duration,
     socket: socket::Socket,
 }
 
@@ -28,9 +29,16 @@ impl Client {
         addr: impl Into<url::Url>,
         timeout: impl Into<Option<Duration>>,
     ) -> Client {
+        let timeout = timeout.into();
+        let options = socket::SocketOptions::builder()
+            .with_timeout(timeout)
+            .with_reconnection_timeout(timeout)
+            .build();
+
         Client {
             token: token.into(),
-            socket: socket::Socket::new(addr, timeout),
+            timeout: options.timeout,
+            socket: socket::Socket::new(addr, options),
         }
     }
 
@@ -124,7 +132,10 @@ impl Client {
         &self,
         request: request::any::Any,
     ) -> Result<response::any::Kind, error::Error> {
-        let response = self.socket.send_request(request.clone()).await;
+        let response = self
+            .socket
+            .send_request(request.clone(), self.timeout)
+            .await;
 
         match response {
             Ok(
@@ -144,7 +155,7 @@ impl Client {
 
                 if res.map(|v| v.invalid_tokens.is_empty()).unwrap_or(false) {
                     self.socket
-                        .send_request(request)
+                        .send_request(request, self.timeout)
                         .map_err(|err| err.into())
                         .await
                 } else {
@@ -163,13 +174,16 @@ impl Client {
     ) -> Result<response::restore_token::RestoreToken, error::Error> {
         let response = self
             .socket
-            .send_request(request::Request {
-                id: Uuid::new_v4(),
-                body: request::any::Kind::RestoreToken(request::restore_token::RestoreToken {
-                    extended: HashMap::from([(pair.name, pair.value)]),
-                    need_user_info: user_info,
-                }),
-            })
+            .send_request(
+                request::Request {
+                    id: Uuid::new_v4(),
+                    body: request::any::Kind::RestoreToken(request::restore_token::RestoreToken {
+                        extended: HashMap::from([(pair.name, pair.value)]),
+                        need_user_info: user_info,
+                    }),
+                },
+                self.timeout,
+            )
             .await?;
 
         extract_response!(response, response::any::Kind::RestoreToken)

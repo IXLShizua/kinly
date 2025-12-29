@@ -53,12 +53,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = args::Args::parse();
 
     if !args.config_path.exists() {
-        let config = config::Config::default();
-        info!(
-            "Config file not found. Saving default with content {:?}.",
-            config
-        );
+        info!("config file not found. saving default");
 
+        let config = config::Config::default();
         let serialized = serde_json::to_string_pretty(&config)?;
         fs::write(&args.config_path, serialized)?;
 
@@ -108,40 +105,37 @@ async fn _main(
 ) -> Result<(), Box<dyn Error>> {
     let addr = std::net::SocketAddr::from((config.binds.host, config.binds.port));
     let listener = net::TcpListener::bind(addr).await?;
-    info!("Proxy listening on address {}", addr);
+    info!("proxy listening on address {}", addr);
 
-    let servers = config.servers.into_iter().map(|server| {
-        (
-            server.name,
-            state::Server {
-                key_pair: state::KeyPair {
-                    private: private_key.clone(),
-                    public: public_key.clone(),
+    let servers = config
+        .servers
+        .into_iter()
+        .map(|server| {
+            (
+                server.name,
+                state::Server {
+                    key_pair: state::KeyPair {
+                        private: private_key.clone(),
+                        public: public_key.clone(),
+                    },
+                    assets: match server.meta.assets {
+                        Assets::AllInOne(values) => values,
+                        Assets::Separated { mut skins, capes } => {
+                            skins.extend(capes);
+                            skins
+                        }
+                    },
+                    socket: launchserver::Client::new(
+                        server.token,
+                        server.api,
+                        time::Duration::from_secs(5),
+                    ),
                 },
-                assets: match server.meta.assets {
-                    Assets::AllInOne(values) => values,
-                    Assets::Separated { skins, capes } => {
-                        let mut values = skins
-                            .into_iter()
-                            .chain(capes.into_iter())
-                            .collect::<Vec<_>>();
-                        values.dedup();
-                        values
-                    }
-                },
-                socket: launchserver::Client::new(
-                    server.token,
-                    server.api,
-                    time::Duration::from_secs(5),
-                ),
-            },
-        )
-    });
+            )
+        })
+        .collect::<HashMap<_, _>>();
 
-    let state = state::State {
-        servers: HashMap::from_iter(servers),
-    };
-
+    let state = state::State { servers };
     http::init(listener, state).await?;
 
     Ok(())

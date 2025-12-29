@@ -3,6 +3,7 @@ use tokio::sync::oneshot;
 
 pub enum Loop {
     Message(ActorMessage),
+    CancelMessage(uuid::Uuid),
     Shutdown(oneshot::Sender<()>),
 }
 

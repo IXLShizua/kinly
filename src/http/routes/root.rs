@@ -1,11 +1,11 @@
 use crate::http::state::ClonableState;
 use axum::{
+    Json,
+    Router,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{on, MethodFilter},
-    Json,
-    Router,
+    routing::{MethodFilter, on},
 };
 use serde::{Deserialize, Serialize};
 

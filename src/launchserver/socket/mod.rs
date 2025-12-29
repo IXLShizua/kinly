@@ -1,31 +1,27 @@
 mod error;
 mod events;
+mod options;
 
 pub use error::*;
+pub use options::*;
 
 use crate::launchserver::{
     socket::events::{input, output},
     types::{request, response},
 };
-use dashmap::DashMap;
 use futures_util::{
-    stream::{SplitSink, SplitStream},
     SinkExt,
     StreamExt,
+    stream::{SplitSink, SplitStream},
 };
-use std::{
-    collections::VecDeque,
-    fmt,
-    fmt::{Display, Formatter},
-    time::Duration,
-};
+use std::{collections::HashMap, time::Duration};
 use tokio::{
     net::TcpStream,
     sync::{mpsc, oneshot},
     task,
     time,
 };
-use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -48,6 +44,8 @@ pub struct Socket {
     /// Sender to communicate with the actor handling the loop.
     actor_sender: mpsc::Sender<input::Loop>,
     actor_handle: task::JoinHandle<()>,
+
+    options: options::SocketOptions,
 }
 
 impl Socket {
@@ -60,17 +58,19 @@ impl Socket {
     /// # Returns
     ///
     /// A new instance of `Socket`.
-    pub fn new(addr: impl Into<url::Url>, timeout: impl Into<Option<Duration>>) -> Socket {
+    pub fn new(addr: impl Into<url::Url>, options: options::SocketOptions) -> Socket {
         let (actor_sender, actor_receiver) = mpsc::channel(CAPACITY);
         let actor_handle = tokio::spawn(start_handle_loop(
             addr.into(),
-            timeout.into(),
+            options.reconnection_timeout,
             actor_receiver,
         ));
 
         Socket {
             actor_sender,
             actor_handle,
+
+            options,
         }
     }
 
@@ -86,7 +86,10 @@ impl Socket {
     pub async fn send_request(
         &self,
         request: request::any::Any,
+        timeout: Duration,
     ) -> Result<response::any::Kind, Error> {
+        let request_id = request.id;
+
         let (tx, rx) = oneshot::channel();
 
         self.actor_sender
@@ -94,9 +97,20 @@ impl Socket {
                 sender: tx,
                 request,
             }))
-            .await?;
+            .await
+            .expect("actor channel is closed");
 
-        rx.await.map_err(Error::from)
+        match time::timeout(timeout, rx).await {
+            Ok(res) => Ok(res.expect("sender of the callback cannot be closed")),
+            Err(_) => {
+                let _ = self
+                    .actor_sender
+                    .send(input::Loop::CancelMessage(request_id))
+                    .await;
+
+                Err(Error::ResponseNotReceived)
+            }
+        }
     }
 
     /// Initiates a graceful shutdown of the WebSocket connection.
@@ -104,36 +118,10 @@ impl Socket {
         let (tx, rx) = oneshot::channel();
 
         let _ = self.actor_sender.send(input::Loop::Shutdown(tx)).await;
-        let _ = time::timeout(Duration::from_secs(5), rx).await;
-        self.actor_handle.abort();
-    }
-}
-
-/// Enum representing possible errors when handling incoming messages.
-#[derive(Debug)]
-enum HandleIncomingMessageError {
-    /// Received a message with an unknown ID.
-    UnknownMessageId(Uuid),
-    /// Error occurred during deserialization.
-    Deserialize(serde_json::Error),
-}
-
-impl std::error::Error for HandleIncomingMessageError {}
-
-impl Display for HandleIncomingMessageError {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            HandleIncomingMessageError::UnknownMessageId(id) => {
-                write!(fmt, "Unknown message id: {}", id)
-            }
-            HandleIncomingMessageError::Deserialize(err) => write!(fmt, "Deserialize: {}", err),
+        let _ = time::timeout(self.options.timeout, rx).await;
+        if !self.actor_handle.is_finished() {
+            self.actor_handle.abort();
         }
-    }
-}
-
-impl From<serde_json::Error> for HandleIncomingMessageError {
-    fn from(value: serde_json::Error) -> Self {
-        HandleIncomingMessageError::Deserialize(value)
     }
 }
 
@@ -152,10 +140,9 @@ async fn start_handle_loop(
     let addr = addr.into();
     let reconnection_timeout = reconnection_timeout.into();
 
-    // Queue to hold messages that failed to send.
-    let mut not_sent_messages: VecDeque<tungstenite::Message> = VecDeque::new();
     // Map to correlate requests with their response senders using UUIDs.
-    let requests_callbacks: DashMap<Uuid, oneshot::Sender<response::any::Kind>> = DashMap::new();
+    let mut requests_callbacks: HashMap<Uuid, oneshot::Sender<response::any::Kind>> =
+        HashMap::new();
 
     // Channels for WebSocket input and output events.
     let (mut ws_input_ev_sender, mut ws_input_ev_receiver) =
@@ -188,136 +175,121 @@ async fn start_handle_loop(
 
     // Main event loop.
     loop {
-        // Retry sending any messages that previously failed.
-        if !not_sent_messages.is_empty() && ws_is_connected {
-            let Some(message) = not_sent_messages.pop_front() else {
-                continue;
-            };
-
-            let _ = ws_input_ev_sender
-                .send(input::websocket::Loop::Message(message))
-                .await;
-        }
-
         tokio::select! {
-                // Handle events from the loopback output (e.g., successful connection)
-                Some(event) = loopback_output_ev_receiver.recv() => {
-                    match event {
-                        output::loopback::Loop::SocketConnected { read, write } => {
-                            // Reinitialize WebSocket input and output channels upon connection.
-                            (ws_input_ev_sender, ws_input_ev_receiver) =
-                                mpsc::channel::<input::websocket::Loop>(CAPACITY);
-                            (ws_output_ev_sender, ws_output_ev_receiver) =
-                                mpsc::channel::<output::websocket::Loop>(CAPACITY);
+            // Handle events from the loopback output (e.g., successful connection)
+            Some(event) = loopback_output_ev_receiver.recv() => {
+                match event {
+                    output::loopback::Loop::SocketConnected { read, write } => {
+                        // Reinitialize WebSocket input and output channels upon connection.
+                        (ws_input_ev_sender, ws_input_ev_receiver) =
+                            mpsc::channel::<input::websocket::Loop>(CAPACITY);
+                        (ws_output_ev_sender, ws_output_ev_receiver) =
+                            mpsc::channel::<output::websocket::Loop>(CAPACITY);
 
-                            // Spawn the WebSocket handler loop.
-                            tokio::spawn(start_ws_handle_loop(
-                                ws_output_ev_sender,
-                                ws_input_ev_receiver,
-                                read,
-                                write,
-                            ));
+                        // Spawn the WebSocket handler loop.
+                        tokio::spawn(start_ws_handle_loop(
+                            ws_output_ev_sender,
+                            ws_input_ev_receiver,
+                            read,
+                            write,
+                        ));
 
-                            ws_is_connected = true;
-                        }
+                        ws_is_connected = true;
                     }
                 }
+            }
 
-                Some(event) = ev_receiver.recv() => {
-                    match event {
-                        input::Loop::Message(msg) => {
-                            let Ok(json_request) = serde_json::to_string(&msg.request) else {
-                                continue;
-                            };
+            Some(event) = ev_receiver.recv() => {
+                match event {
+                    input::Loop::Message(msg) => {
+                        let Ok(json_request) = serde_json::to_string(&msg.request) else {
+                            continue;
+                        };
 
-                            requests_callbacks.insert(msg.request.id, msg.sender);
+                        requests_callbacks.insert(msg.request.id, msg.sender);
 
-                            let _ = ws_input_ev_sender
-                                .send(input::websocket::Loop::Message(tungstenite::Message::text(json_request)))
-                                .await;
-                        },
-                        input::Loop::Shutdown(sender) => {
-                            debug!("start_handle_loop shutdown received");
-
-                            if ws_is_connected {
-                                // Initiate shutdown of the WebSocket handler.
-                                let (ws_tx, ws_rx) = oneshot::channel();
-                                let _ = ws_input_ev_sender
-                                    .send(input::websocket::Loop::Shutdown(ws_tx))
-                                    .await;
-                                let _ = ws_rx.await;
-                            }
-
-                            // Initiate shutdown of the loopback handler.
-                            let (loopback_tx, loopback_rx) = oneshot::channel();
-                            let _ = loopback_input_ev_sender
-                                .send(input::loopback::Loop::Shutdown(loopback_tx))
-                                .await;
-                            let _ = loopback_rx.await;
-
-                            // Confirm shutdown to the caller.
-                            let _ = sender.send(());
-
-                            break;
+                        let _ = ws_input_ev_sender
+                            .send(input::websocket::Loop::Message(tungstenite::Message::text(json_request)))
+                            .await;
+                    },
+                    input::Loop::CancelMessage(request_id) => {
+                        if requests_callbacks.remove(&request_id).is_none() {
+                            debug!("failed to remove message {} with exceeded timeout", request_id);
                         }
                     }
-                }
+                    input::Loop::Shutdown(sender) => {
+                        debug!("start_handle_loop shutdown received");
 
-                // Handle events from the WebSocket output (e.g., incoming messages, errors).
-                Some(event) = ws_output_ev_receiver.recv() => {
-                    match event {
-                        output::websocket::Loop::Message(msg) => {
-                            let tungstenite::Message::Text(text) = msg else {
-                                continue
-                            };
-
-                            let handle_msg_inner = |text: String| {
-                                let response = serde_json::from_str::<response::any::Any>(&text)?;
-
-                                let (_, sender) = requests_callbacks
-                                    .remove(&response.id)
-                                    .ok_or(HandleIncomingMessageError::UnknownMessageId(response.id))?;
-
-                                Ok::<_, HandleIncomingMessageError>((sender, response))
-                            };
-
-                            match handle_msg_inner(text.to_string()) {
-                                Ok((sender, response)) => {
-                                    // Send the response back through the oneshot channel.
-                                    if sender.send(response.body).is_err() {
-                                        debug!("failed to send response to channel");
-                                    }
-                                }
-                                Err(err) => {
-                                    debug!("failed to handle incoming message: {:?}", err);
-                                }
-                            };
-                        }
-                        output::websocket::Loop::FailedToSend(msg, err) => {
-                            debug!("failed to send message: {} {}", msg, err);
-
-                            not_sent_messages.push_back(msg);
-                        }
-                        output::websocket::Loop::Disconnect => {
-                            ws_is_connected = false;
-
+                        if ws_is_connected {
                             // Initiate shutdown of the WebSocket handler.
                             let (ws_tx, ws_rx) = oneshot::channel();
                             let _ = ws_input_ev_sender
                                 .send(input::websocket::Loop::Shutdown(ws_tx))
                                 .await;
                             let _ = ws_rx.await;
-
-                            // Attempt to reconnect by sending a connect request to loopback.
-                            let _ = loopback_input_ev_sender
-                                .send(input::loopback::Loop::ConnectSocket {
-                                    addr: addr.clone(),
-                                    timeout: reconnection_timeout
-                                })
-                                .await;
                         }
+
+                        // Initiate shutdown of the loopback handler.
+                        let (loopback_tx, loopback_rx) = oneshot::channel();
+                        let _ = loopback_input_ev_sender
+                            .send(input::loopback::Loop::Shutdown(loopback_tx))
+                            .await;
+                        let _ = loopback_rx.await;
+
+                        // Confirm shutdown to the caller.
+                        let _ = sender.send(());
+
+                        break;
                     }
                 }
+            }
+
+            // Handle events from the WebSocket output (e.g., incoming messages, errors).
+            Some(event) = ws_output_ev_receiver.recv() => {
+                match event {
+                    output::websocket::Loop::Message(msg) => {
+                        let tungstenite::Message::Text(text) = msg else {
+                            continue
+                        };
+
+                        let response = match serde_json::from_str::<response::any::Any>(&text) {
+                            Ok(response) => response,
+                            Err(err) => {
+                                debug!("failed to deserialize response: {}, error: {}", text, err);
+                                continue;
+                            }
+                        };
+
+                        let Some(sender) = requests_callbacks.remove(&response.id) else {
+                            debug!("failed to find callback with id {}", response.id);
+                            continue;
+                        };
+
+                        // Send the response back through the oneshot channel.
+                        if sender.send(response.body).is_err() {
+                            debug!("failed to send response to channel");
+                        }
+                    }
+                    output::websocket::Loop::Disconnect => {
+                        ws_is_connected = false;
+
+                        // Initiate shutdown of the WebSocket handler.
+                        let (ws_tx, ws_rx) = oneshot::channel();
+                        let _ = ws_input_ev_sender
+                            .send(input::websocket::Loop::Shutdown(ws_tx))
+                            .await;
+                        let _ = ws_rx.await;
+
+                        // Attempt to reconnect by sending a connect request to loopback.
+                        let _ = loopback_input_ev_sender
+                        .send(input::loopback::Loop::ConnectSocket {
+                            addr: addr.clone(),
+                            timeout: reconnection_timeout
+                        })
+                        .await;
+                    }
+                }
+            }
         }
     }
 }
@@ -465,6 +437,8 @@ async fn start_ws_handle_loop(
             Some(ws_sender_output_ev) = ws_sender_output_ev_rx.recv() => {
                 match ws_sender_output_ev {
                     output::websocket::sender::Loop::FailedToSend(msg, err) => {
+                        debug!("failed to send message: {} {}", msg, err);
+
                         if matches!(
                             err,
                             tungstenite::Error::ConnectionClosed
@@ -475,8 +449,6 @@ async fn start_ws_handle_loop(
                         ) {
                             let _ = ev_sender.send(output::websocket::Loop::Disconnect).await;
                         }
-
-                        let _ = ev_sender.send(output::websocket::Loop::FailedToSend(msg, err)).await;
                     }
                 }
             }
