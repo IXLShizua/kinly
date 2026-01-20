@@ -13,7 +13,6 @@ jobs:
     strategy:
       matrix:
         target:
-          # - x86_64-pc-windows-msvc
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
 
@@ -78,8 +77,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Пытаемся удалить релиз 'dev' и связанный тег.
-          # || true нужен, чтобы пайплайн не падал, если релиза еще нет (первый запуск)
           gh release delete dev --cleanup-tag --yes || true
 
       - name: Create pre-release
