@@ -13,6 +13,7 @@ jobs:
     strategy:
       matrix:
         target:
+          # - x86_64-pc-windows-msvc
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
 
@@ -60,6 +61,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Compute variables
         id: vars
         run: |
