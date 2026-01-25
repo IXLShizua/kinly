@@ -1,8 +1,13 @@
 use crate::http::state::ClonableState;
 use axum::Router;
+use futures::future::select;
 use futures_util::StreamExt;
 use routes::{api, root, sessionserver};
-use tokio::{io, net, signal};
+use tokio::{
+    io,
+    net,
+    signal::unix::{SignalKind, signal},
+};
 use tracing::info;
 
 pub mod dto;
@@ -24,7 +29,15 @@ pub async fn init(listener: net::TcpListener, state: state::State) -> Result<(),
 
     axum::serve(listener, router)
         .with_graceful_shutdown(async move {
-            signal::ctrl_c().await.unwrap();
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("failed to construct SIGTERM signal");
+            let mut sigint =
+                signal(SignalKind::interrupt()).expect("failed to construct SIGINT signal");
+
+            tokio::select! {
+                _ = sigterm.recv() => info!("SIGTERM received. Quitting."),
+                _ = sigint.recv() => info!("SIGINT received. Quitting."),
+            }
 
             let sockets = state.servers().values().map(|server| &server.socket);
             futures::stream::iter(sockets)
