@@ -19,4 +19,16 @@ pub struct Args {
         help = "Path to data directory (relative/absolute)"
     )]
     pub data_dir: PathBuf,
+
+    #[arg(
+        default_value = "logs",
+        id = "logs",
+        long = "logs-dir",
+        help = "Path to logs directory (relative/absolute)"
+    )]
+    pub logs_dir: PathBuf,
+}
+
+pub fn load() -> Args {
+    Args::parse()
 }

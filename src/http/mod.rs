@@ -1,6 +1,5 @@
 use crate::http::state::ClonableState;
 use axum::Router;
-use futures::future::select;
 use futures_util::StreamExt;
 use routes::{api, root, sessionserver};
 use tokio::{
@@ -35,8 +34,8 @@ pub async fn init(listener: net::TcpListener, state: state::State) -> Result<(),
                 signal(SignalKind::interrupt()).expect("failed to construct SIGINT signal");
 
             tokio::select! {
-                _ = sigterm.recv() => info!("SIGTERM received. Quitting."),
-                _ = sigint.recv() => info!("SIGINT received. Quitting."),
+                _ = sigterm.recv() => info!("SIGTERM received, application shutdown initiated."),
+                _ = sigint.recv() => info!("SIGINT received, application shutdown initiated."),
             }
 
             let sockets = state.servers().values().map(|server| &server.socket);
@@ -46,7 +45,7 @@ pub async fn init(listener: net::TcpListener, state: state::State) -> Result<(),
                 })
                 .await;
 
-            info!("Ctrl^C signal received. Quitting.");
+            info!("application successfully stopped. Exit...");
         })
         .await
 }

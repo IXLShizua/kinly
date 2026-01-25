@@ -1,4 +1,9 @@
+use std::{fs, path::Path};
+
+use figment::providers::{self, Format};
 use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, Snafu};
+use tokio::io;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
@@ -43,9 +48,29 @@ pub mod server {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Config {
+#[derive(Debug, Snafu)]
+pub enum LoadConfigError {
+    #[snafu(display("writing new config"))]
+    Write {
+        #[snafu(source)]
+        source: io::Error,
+    },
+
+    #[snafu(display("extracting existing config"))]
+    Extract {
+        #[snafu(source)]
+        source: Box<figment::Error>,
+    },
+}
+
+pub enum ConfigSource {
+    Created(Config),
+    Loaded(Config),
+}
+
+pub fn load_or_create_config(path: &Path) -> Result<ConfigSource, LoadConfigError> {
+    if !path.exists() {
+        let config = Config {
             binds: Binds {
                 host: "0.0.0.0"
                     .parse()
@@ -53,6 +78,20 @@ impl Default for Config {
                 port: 10000,
             },
             servers: Vec::default(),
-        }
+        };
+
+        let serialized = serde_json::to_string_pretty(&config).unwrap();
+        fs::write(path, serialized).context(WriteSnafu)?;
+
+        return Ok(ConfigSource::Created(config));
     }
+
+    let config = figment::Figment::new()
+        .join(providers::Json::file(path))
+        .extract::<Config>()
+        .map_err(|err| LoadConfigError::Extract {
+            source: Box::new(err),
+        })?;
+
+    Ok(ConfigSource::Loaded(config))
 }
