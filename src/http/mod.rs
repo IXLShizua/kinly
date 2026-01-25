@@ -17,7 +17,7 @@ pub async fn init(listener: net::TcpListener, state: state::State) -> Result<(),
             "/{server_id}",
             Router::new()
                 .merge(root::router())
-                .nest("/http", api::router())
+                .nest("/api", api::router())
                 .nest("/sessionserver", sessionserver::router()),
         )
         .with_state(state.clone());
