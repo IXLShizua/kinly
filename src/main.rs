@@ -1,14 +1,18 @@
+use futures::StreamExt;
 use kinly::{
     args,
     config::{self, server::meta::Assets},
-    http::{self, state},
+    http::{self, state, state::ClonableState},
     keypair,
     launchserver,
     logging,
 };
 use snafu::{Report, ResultExt, Snafu};
 use std::{collections::HashMap, io, time};
-use tokio::net;
+use tokio::{
+    net,
+    signal::unix::{SignalKind, signal},
+};
 use tracing::info;
 
 #[derive(Debug, Snafu)]
@@ -114,8 +118,25 @@ async fn async_main(
         })
         .collect::<HashMap<_, _>>();
 
-    let state = state::State { servers };
-    http::init(listener, state).await.context(ServeHttpSnafu)?;
+    let state = ClonableState::new(state::State { servers });
+
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to construct SIGTERM signal");
+    let mut sigint = signal(SignalKind::interrupt()).expect("failed to construct SIGINT signal");
+
+    tokio::select! {
+        v = http::init(listener, state.clone()) => v.context(ServeHttpSnafu)?,
+        _ = sigterm.recv() => info!("SIGTERM received, application shutdown initiated."),
+        _ = sigint.recv() => info!("SIGINT received, application shutdown initiated."),
+    }
+
+    let sockets = state.servers().values().map(|server| &server.socket);
+    futures::stream::iter(sockets)
+        .for_each(|socket| async move {
+            socket.shutdown().await;
+        })
+        .await;
+
+    info!("application successfully stopped. Exit...");
 
     Ok(())
 }
