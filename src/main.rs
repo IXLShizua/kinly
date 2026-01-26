@@ -1,142 +1,140 @@
-use clap::Parser;
-use figment::{providers, providers::Format};
-use kinly::{args, config, config::server::meta::Assets, http, http::state, launchserver};
-use openssl::{pkey, rsa};
-use std::{
-    collections::HashMap,
-    error::Error,
-    fs,
-    io,
-    io::Write,
-    os::unix::fs::OpenOptionsExt,
-    time,
+use futures::StreamExt;
+use kinly::{
+    args,
+    config::{self, server::meta::Assets},
+    http::{self, state},
+    keypair,
+    launchserver,
+    logging,
 };
-use tokio::net;
-use tracing::{Level, info};
-use tracing_subscriber::{Layer, filter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use snafu::{Report, ResultExt, Snafu};
+use std::{collections::HashMap, io, sync::Arc, time};
+use tokio::{
+    net,
+    signal::unix::{SignalKind, signal},
+};
+use tracing::info;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    tracing_subscriber::registry()
-        .with(
-            fmt::layer().with_filter(
-                filter::EnvFilter::builder()
-                    .with_default_directive(Level::INFO.into())
-                    .with_env_var("LOG_LEVEL")
-                    .from_env()?,
-            ),
-        )
-        .with({
-            let timestamp = time::SystemTime::now()
-                .duration_since(time::UNIX_EPOCH)?
-                .as_secs();
+#[derive(Debug, Snafu)]
+enum ApplicationError {
+    #[snafu(display("initializing app logging"))]
+    InitLogging {
+        #[snafu(source)]
+        source: logging::InitLoggingError,
+    },
 
-            let file = {
-                if let Err(err) = fs::create_dir("logs")
-                    && err.kind() != io::ErrorKind::AlreadyExists
-                {
-                    return Err(err.into());
-                }
+    #[snafu(display("loading keypair"))]
+    LoadKeyPair {
+        #[snafu(source)]
+        source: keypair::LoadKeyPairError,
+    },
 
-                fs::OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(format!("logs/debug-{}.log", timestamp))?
-            };
+    #[snafu(display("loading config"))]
+    LoadConfig {
+        #[snafu(source)]
+        source: config::LoadConfigError,
+    },
 
-            fmt::layer()
-                .with_ansi(false)
-                .with_writer(file)
-                .with_filter(filter::LevelFilter::from_level(Level::DEBUG))
-        })
-        .init();
+    #[snafu(display("binding TCP listener"))]
+    BindListener {
+        #[snafu(source)]
+        source: io::Error,
+    },
 
-    let args = args::Args::parse();
+    #[snafu(display("serving HTTP API"))]
+    ServeHttp {
+        #[snafu(source)]
+        source: io::Error,
+    },
+}
 
-    if !args.config_path.exists() {
-        info!("config file not found. saving default");
+fn main() -> Report<ApplicationError> {
+    Report::capture(common_main)
+}
 
-        let config = config::Config::default();
-        let serialized = serde_json::to_string_pretty(&config)?;
-        fs::write(&args.config_path, serialized)?;
+fn common_main() -> Result<(), ApplicationError> {
+    let args = args::load();
 
-        return Ok(());
-    }
+    logging::load(&args.logs_dir).context(InitLoggingSnafu)?;
 
-    let key_pair = {
-        let keys_dir = args.data_dir.join("keys");
-        fs::create_dir_all(&keys_dir)?;
+    let key_pair =
+        keypair::load_or_create_key_pair(&args.data_dir.join("keys")).context(LoadKeyPairSnafu)?;
 
-        let private_key_path = keys_dir.join("private.pem");
-
-        let rsa_private = if !private_key_path.exists() {
-            let rsa = rsa::Rsa::generate(4096)?;
-
-            let mut options = fs::OpenOptions::new();
-            options.write(true).create_new(true).mode(0o600);
-
-            let mut file = options.open(&private_key_path)?;
-            file.write_all(&rsa.private_key_to_pem()?)?;
-
-            rsa
-        } else {
-            let key_data = fs::read(&private_key_path)?;
-            rsa::Rsa::private_key_from_pem(&key_data)?
-        };
-
-        let public_key = String::from_utf8(rsa_private.public_key_to_pem()?)?;
-
-        (rsa_private, public_key)
+    let config = match config::load_or_create_config(&args.config_path).context(LoadConfigSnafu)? {
+        config::ConfigSource::Created(config) => {
+            info!(
+                "application config not found. created new ({:?}): {:?}",
+                args.config_path.canonicalize().unwrap(),
+                config
+            );
+            return Ok(());
+        }
+        config::ConfigSource::Loaded(config) => config,
     };
-
-    let config = figment::Figment::new()
-        .join(providers::Json::file(&args.config_path))
-        .extract::<config::Config>()?;
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .build()?;
-    rt.block_on(_main(args, config, key_pair))
+        .build()
+        .unwrap();
+    rt.block_on(async_main(args, config, key_pair))
 }
 
-async fn _main(
+async fn async_main(
     _args: args::Args,
     config: config::Config,
-    (private_key, public_key): (rsa::Rsa<pkey::Private>, String),
-) -> Result<(), Box<dyn Error>> {
+    keypair: keypair::KeyPair,
+) -> Result<(), ApplicationError> {
     let addr = std::net::SocketAddr::from((config.binds.host, config.binds.port));
-    let listener = net::TcpListener::bind(addr).await?;
+    let listener = net::TcpListener::bind(addr)
+        .await
+        .context(BindListenerSnafu)?;
     info!("proxy listening on address {}", addr);
 
     let servers = config
         .servers
         .into_iter()
         .map(|server| {
-            (
-                server.name,
-                state::Server {
-                    key_pair: state::KeyPair {
-                        private: private_key.clone(),
-                        public: public_key.clone(),
-                    },
-                    assets: match server.meta.assets {
-                        Assets::AllInOne(values) => values,
-                        Assets::Separated { mut skins, capes } => {
-                            skins.extend(capes);
-                            skins
-                        }
-                    },
-                    socket: launchserver::Client::new(
-                        server.token,
-                        server.api,
-                        time::Duration::from_secs(5),
-                    ),
+            let name = server.name;
+            let server = state::Server {
+                key_pair: state::ServerKeyPair {
+                    private: keypair.private.clone(),
+                    public: keypair.public.clone(),
                 },
-            )
+                assets: match server.meta.assets {
+                    Assets::AllInOne(values) => values,
+                    Assets::Separated { mut skins, capes } => {
+                        skins.extend(capes);
+                        skins
+                    }
+                },
+                client: launchserver::Client::new(
+                    server.token,
+                    server.api,
+                    time::Duration::from_secs(5),
+                ),
+            };
+
+            (name, Arc::new(server))
         })
         .collect::<HashMap<_, _>>();
 
-    let state = state::State { servers };
-    http::init(listener, state).await?;
+    let state = Arc::new(state::State { servers });
+
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to construct SIGTERM signal");
+    let mut sigint = signal(SignalKind::interrupt()).expect("failed to construct SIGINT signal");
+
+    tokio::select! {
+        v = http::init(listener, Arc::clone(&state)) => v.context(ServeHttpSnafu)?,
+        _ = sigterm.recv() => info!("SIGTERM received, application shutdown initiated."),
+        _ = sigint.recv() => info!("SIGINT received, application shutdown initiated."),
+    }
+
+    let sockets = state.servers.values().map(|server| &server.client);
+    futures::stream::iter(sockets)
+        .for_each_concurrent(None, async |socket| socket.shutdown().await)
+        .await;
+
+    info!("application successfully stopped. Exit...");
 
     Ok(())
 }

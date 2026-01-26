@@ -14,7 +14,7 @@ pub struct RootPath {
     pub server_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RootResponse {
     pub meta: meta::Meta,
@@ -23,9 +23,9 @@ pub struct RootResponse {
 }
 
 pub mod meta {
-    use serde::{Deserialize, Serialize};
+    use serde::Serialize;
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     pub struct Meta {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -47,7 +47,7 @@ async fn root(
     State(state): State<ClonableState>,
     Path(RootPath { server_id }): Path<RootPath>,
 ) -> impl IntoResponse {
-    let Some(server) = state.servers().get(&server_id) else {
+    let Some(server) = state.servers.get(&server_id) else {
         return StatusCode::NO_CONTENT.into_response();
     };
 
