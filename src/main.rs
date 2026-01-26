@@ -45,10 +45,10 @@ enum ApplicationError {
 }
 
 fn main() -> Report<ApplicationError> {
-    Report::capture(normal_main)
+    Report::capture(common_main)
 }
 
-fn normal_main() -> Result<(), ApplicationError> {
+fn common_main() -> Result<(), ApplicationError> {
     let args = args::load();
 
     logging::load(&args.logs_dir).context(InitLoggingSnafu)?;
