@@ -1,21 +1,11 @@
 use crate::http::{
     dto::response::profile::Profile,
+    extractors::current_server::CurrentServerHandle,
     routes::sessionserver::mapper::map_profile,
-    state::ClonableState,
 };
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{Json, extract::Query, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-#[derive(Deserialize)]
-pub struct PlayerHasJoinedPath {
-    pub server_id: String,
-}
 
 #[derive(Deserialize)]
 pub struct PlayerHasJoinedQuery {
@@ -31,34 +21,36 @@ pub struct PlayerHasJoinedQuery {
 pub struct PlayerHasJoinedResponse(pub Profile);
 
 pub async fn player_has_joined(
-    State(state): State<ClonableState>,
-    Path(PlayerHasJoinedPath {
-        server_id: path_server_id,
-    }): Path<PlayerHasJoinedPath>,
     Query(PlayerHasJoinedQuery {
         username,
         server_id,
         ip: _,
     }): Query<PlayerHasJoinedQuery>,
+    current_server: CurrentServerHandle,
 ) -> impl IntoResponse {
-    let Some(server) = state.servers().get(&path_server_id) else {
-        return StatusCode::NO_CONTENT.into_response();
-    };
-
-    let Ok(check_server) = server
-        .socket
+    let Ok(check_server) = current_server
+        .client()
         .check_server(username.clone(), server_id.clone(), false, false)
         .await
     else {
         return StatusCode::NO_CONTENT.into_response();
     };
 
-    let Ok(profile) = server.socket.get_profile_by_uuid(check_server.uuid).await else {
+    let Ok(profile) = current_server
+        .client()
+        .get_profile_by_uuid(check_server.uuid)
+        .await
+    else {
         return StatusCode::NO_CONTENT.into_response();
     };
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let response = map_profile(profile.player_profile, &server.key_pair.private, now, false);
+    let response = map_profile(
+        profile.player_profile,
+        &current_server.keypair().private,
+        now,
+        false,
+    );
 
     (StatusCode::OK, Json(PlayerHasJoinedResponse(response))).into_response()
 }

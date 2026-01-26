@@ -3,6 +3,7 @@ use routes::{api, root, sessionserver};
 use tokio::{io, net};
 
 pub mod dto;
+mod extractors;
 mod routes;
 pub mod state;
 

@@ -2,30 +2,19 @@ use crate::launchserver;
 use openssl::{pkey, rsa};
 use std::{collections::HashMap, sync::Arc};
 
-#[derive(Clone)]
-pub struct ClonableState(Arc<State>);
-
-impl ClonableState {
-    pub fn new(state: State) -> ClonableState {
-        ClonableState(Arc::new(state))
-    }
-
-    pub fn servers(&self) -> &HashMap<String, Server> {
-        &self.0.servers
-    }
-}
+pub type ClonableState = Arc<State>;
 
 pub struct State {
-    pub servers: HashMap<String, Server>,
+    pub servers: HashMap<String, Arc<Server>>,
 }
 
 pub struct Server {
-    pub key_pair: KeyPair,
+    pub key_pair: ServerKeyPair,
     pub assets: Vec<String>,
-    pub socket: launchserver::Client,
+    pub client: launchserver::Client,
 }
 
-pub struct KeyPair {
+pub struct ServerKeyPair {
     pub private: rsa::Rsa<pkey::Private>,
     pub public: String,
 }
