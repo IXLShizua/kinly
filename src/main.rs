@@ -131,9 +131,7 @@ async fn async_main(
 
     let sockets = state.servers().values().map(|server| &server.socket);
     futures::stream::iter(sockets)
-        .for_each(|socket| async move {
-            socket.shutdown().await;
-        })
+        .for_each_concurrent(None, async |socket| socket.shutdown().await)
         .await;
 
     info!("application successfully stopped. Exit...");
