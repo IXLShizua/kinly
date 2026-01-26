@@ -1,9 +1,7 @@
 /target
 
 .idea
+
 config.json
 data
-
-private.pem
-public.pem
-CHANGELOG.md
+logs
