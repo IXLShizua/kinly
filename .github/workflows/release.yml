@@ -2,7 +2,14 @@ name: Build and publish dev prelease
 
 on:
   push:
-    branches: ["dev"]
+    branches: [ "dev" ]
+    paths:
+      - '.cargo/**/*'
+      - '.github/**/*'
+      - 'src/**/*'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Cross.toml'
 
 env:
   CARGO_TERM_COLOR: always
