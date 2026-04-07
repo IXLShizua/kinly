@@ -1,4 +1,4 @@
-name: Build and publish dev prelease
+name: Build and publish dev prerelease
 
 on:
   push:
@@ -17,47 +17,55 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build (${{ matrix.target }})
     strategy:
+      fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - aarch64-unknown-linux-gnu
+        include:
+          - runs_on: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            artifact_name: kinly-x86_64-unknown-linux-gnu
+          - runs_on: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact_name: kinly-aarch64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.runs_on }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
 
-      - name: Install Cross
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
         run: cargo install cross --locked
 
-      - name: Release Build (Linux)
-        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu' }}
-        run: cross build --release --target ${{ matrix.target }}
+      - name: Build release with cross
+        run: cross build --release --locked --target ${{ matrix.target }}
 
-      - name: Normalize artifacts
-        run: cp target/${{ matrix.target }}/release/kinly target/${{ matrix.target }}/release/kinly-${{ matrix.target }}
+      - name: Normalize artifact
+        run: |
+          cp target/${{ matrix.target }}/release/kinly \
+             target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kinly-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/kinly-${{ matrix.target }}
+          name: ${{ matrix.artifact_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
   publish:
     name: Publish Edge Release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
