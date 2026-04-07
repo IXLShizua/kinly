@@ -9,7 +9,6 @@ on:
       - 'src/**/*'
       - 'Cargo.toml'
       - 'Cargo.lock'
-      - 'Cross.toml'
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,9 +24,11 @@ jobs:
           - runs_on: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             artifact_name: kinly-x86_64-unknown-linux-gnu
+            libc_version: 2.16
           - runs_on: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             artifact_name: kinly-aarch64-unknown-linux-gnu
+            libc_version: 2.17
 
     runs-on: ${{ matrix.runs_on }}
 
@@ -45,11 +46,11 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Install cross
-        run: cargo install cross --locked
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
 
-      - name: Build release with cross
-        run: cross build --release --locked --target ${{ matrix.target }}
+      - name: Build release with cargo-zigbuild
+        run: cross build --release --locked --target ${{ matrix.target }}.${{ matrix.libc_version }}
 
       - name: Normalize artifact
         run: |
