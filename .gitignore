@@ -1,6 +1,7 @@
 /target
 
 .idea
+.direnv
 
 config.json
 data
