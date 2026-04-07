@@ -57,6 +57,8 @@ pub mod profile {
                     #[derive(Serialize, Deserialize, Debug)]
                     pub struct Skin {
                         pub url: String,
+
+                        #[serde(skip_serializing_if = "Option::is_none")]
                         pub metadata: Option<metadata::Metadata>,
                     }
 
