@@ -50,18 +50,16 @@ jobs:
         run: cargo install cargo-zigbuild --locked
 
       - name: Build release with cargo-zigbuild
-        run: cross build --release --locked --target ${{ matrix.target }}.${{ matrix.libc_version }}
+        run: cargo zigbuild --release --locked --target ${{ matrix.target }}.${{ matrix.libc_version }}
 
       - name: Normalize artifact
-        run: |
-          cp target/${{ matrix.target }}/release/kinly \
-             target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+        run: cp target/release/kinly target/release/${{ matrix.artifact_name }}
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          path: target/release/${{ matrix.artifact_name }}
 
   publish:
     name: Publish Edge Release
