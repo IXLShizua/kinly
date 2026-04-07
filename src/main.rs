@@ -56,6 +56,11 @@ fn common_main() -> Result<(), ApplicationError> {
 
     logging::load(&args.logs_dir).context(InitLoggingSnafu)?;
 
+    info!(
+        "current build is running on a commit: {}",
+        option_env!("CURRENT_VERSION_HASH").unwrap_or("unknown")
+    );
+
     let key_pair =
         keypair::load_or_create_key_pair(&args.data_dir.join("keys")).context(LoadKeyPairSnafu)?;
 

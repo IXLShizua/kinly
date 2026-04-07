@@ -52,7 +52,9 @@ jobs:
           pip install cargo-zigbuild
 
       - name: Build release with cargo-zigbuild
-        run: cargo zigbuild --release --locked --target ${{ matrix.target }}.${{ matrix.libc_version }}
+        run: |
+          export CURRENT_VERSION_HASH="${GITHUB_SHA::7}"
+          cargo zigbuild --release --locked --target ${{ matrix.target }}.${{ matrix.libc_version }}
 
       - name: Normalize artifact
         run: cp target/${{ matrix.target }}/release//kinly target/release/${{ matrix.artifact_name }}
