@@ -47,7 +47,9 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Install cargo-zigbuild
-        run: cargo install cargo-zigbuild --locked
+        run: |
+          pip install ziglang
+          pip install cargo-zigbuild
 
       - name: Build release with cargo-zigbuild
         run: cargo zigbuild --release --locked --target ${{ matrix.target }}.${{ matrix.libc_version }}
