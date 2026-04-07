@@ -3,10 +3,9 @@ use kinly::{
     args,
     config::{self, server::meta::Assets},
     http::{self, state},
-    keypair,
-    launchserver,
-    logging,
+    keypair, launchserver, logging,
 };
+use openssl::pkey;
 use snafu::{Report, ResultExt, Snafu};
 use std::{collections::HashMap, io, sync::Arc, time};
 use tokio::{
@@ -97,7 +96,8 @@ async fn async_main(
             let name = server.name;
             let server = state::Server {
                 key_pair: state::ServerKeyPair {
-                    private: keypair.private.clone(),
+                    private: pkey::PKey::from_rsa(keypair.private.clone())
+                        .expect("failed to get pkey from rsa pkey"),
                     public: keypair.public.clone(),
                 },
                 assets: match server.meta.assets {

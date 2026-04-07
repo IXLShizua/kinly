@@ -1,5 +1,5 @@
 use crate::launchserver;
-use openssl::{pkey, rsa};
+use openssl::pkey;
 use std::{collections::HashMap, sync::Arc};
 
 pub type ClonableState = Arc<State>;
@@ -15,6 +15,6 @@ pub struct Server {
 }
 
 pub struct ServerKeyPair {
-    pub private: rsa::Rsa<pkey::Private>,
+    pub private: pkey::PKey<pkey::Private>,
     pub public: String,
 }

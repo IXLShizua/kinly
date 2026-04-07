@@ -1,11 +1,10 @@
 use crate::http::{
     dto::response::profile::Profile,
     extractors::current_server::CurrentServerHandle,
-    routes::sessionserver::mapper::map_profile,
+    routes::sessionserver::mapper::map_player_profile,
 };
 use axum::{Json, extract::Query, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Deserialize)]
 pub struct PlayerHasJoinedQuery {
@@ -44,11 +43,9 @@ pub async fn player_has_joined(
         return StatusCode::NO_CONTENT.into_response();
     };
 
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let response = map_profile(
+    let response = map_player_profile(
         profile.player_profile,
         &current_server.keypair().private,
-        now,
         false,
     );
 

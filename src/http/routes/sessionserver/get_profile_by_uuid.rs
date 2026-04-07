@@ -1,7 +1,6 @@
 use crate::http::{
-    dto::response::profile::Profile,
-    extractors::current_server::CurrentServerHandle,
-    routes::sessionserver::mapper::map_profile,
+    dto::response::profile::Profile, extractors::current_server::CurrentServerHandle,
+    routes::sessionserver::mapper::map_player_profile,
 };
 use axum::{
     Json,
@@ -10,7 +9,6 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Deserialize)]
 pub struct GetProfileByUuidPath {
@@ -38,11 +36,9 @@ pub async fn get_profile_by_uuid(
         return StatusCode::NO_CONTENT.into_response();
     };
 
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let response = map_profile(
+    let response = map_player_profile(
         profile.player_profile,
-        &current_server.keypair().private,
-        now,
+        current_server.keypair().private.as_ref(),
         !unsigned,
     );
 
