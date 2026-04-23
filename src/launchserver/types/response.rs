@@ -148,8 +148,9 @@ pub mod base {
         pub mod skin {
             use serde::{Deserialize, Serialize};
 
-            #[derive(Serialize, Deserialize, Debug)]
+            #[derive(Serialize, Deserialize, derive_more::Debug)]
             pub struct Skin {
+                #[debug("{url}")]
                 pub url: url::Url,
                 pub digest: String,
 
@@ -181,8 +182,9 @@ pub mod base {
         pub mod cape {
             use serde::{Deserialize, Serialize};
 
-            #[derive(Serialize, Deserialize, Debug)]
+            #[derive(Serialize, Deserialize, derive_more::Debug)]
             pub struct Cape {
+                #[debug("{url}")]
                 pub url: url::Url,
                 pub digest: String,
             }
