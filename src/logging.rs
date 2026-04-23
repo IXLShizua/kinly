@@ -46,7 +46,7 @@ pub fn load(dir: &Path) -> Result<(), InitLoggingError> {
                 fs::OpenOptions::new()
                     .append(true)
                     .create(true)
-                    .open(format!("logs/debug-{}.log", timestamp))
+                    .open(dir.join(format!("debug-{}.log", timestamp)))
                     .unwrap()
             };
 
