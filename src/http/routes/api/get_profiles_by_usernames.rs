@@ -31,7 +31,7 @@ pub async fn get_profiles_by_usernames(
         .client()
         .batch_profiles_by_usernames(usernames.clone())
         .await
-        .inspect(|value| debug!(value = ?value, "launcher::get_profiles_by_usernames succeeded"))
+        .inspect(|value| debug!(value = ?value.player_profiles, "launcher::get_profiles_by_usernames succeeded"))
         .inspect_err(|error| debug!(error = %error, "launcher::get_profiles_by_usernames failed"))
     else {
         return StatusCode::NO_CONTENT.into_response();

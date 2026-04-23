@@ -54,7 +54,7 @@ pub async fn player_has_joined(
         .client()
         .get_profile_by_uuid(check_server.uuid)
         .await
-        .inspect(|value| debug!(value = ?value, "launcher::get_profile_by_uuid succeeded"))
+        .inspect(|value| debug!(value = ?value.player_profile, "launcher::get_profile_by_uuid succeeded"))
         .inspect_err(|error| debug!(error = %error, "launcher::get_profile_by_uuid failed"))
     else {
         return StatusCode::NO_CONTENT.into_response();
