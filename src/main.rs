@@ -3,7 +3,9 @@ use kinly::{
     args,
     config::{self, server::meta::Assets},
     http::{self, state},
-    keypair, launchserver, logging,
+    keypair,
+    launchserver,
+    logging,
 };
 use openssl::pkey;
 use snafu::{Report, ResultExt, Snafu};
@@ -64,16 +66,15 @@ fn common_main() -> Result<(), ApplicationError> {
     let key_pair =
         keypair::load_or_create_key_pair(&args.data_dir.join("keys")).context(LoadKeyPairSnafu)?;
 
-    let config = match config::load_or_create_config(&args.config_path).context(LoadConfigSnafu)? {
-        config::ConfigSource::Created(config) => {
+    let config = match config::resolve_config(&args.config_path).context(LoadConfigSnafu)? {
+        config::Resolved::Created(_) => {
             info!(
-                "application config not found. created new ({:?}): {:?}",
-                args.config_path.canonicalize().unwrap(),
-                config
+                "application config not found. created new at path: {:?}",
+                args.config_path.canonicalize().unwrap()
             );
             return Ok(());
         }
-        config::ConfigSource::Loaded(config) => config,
+        config::Resolved::Loaded(config) => config,
     };
 
     let rt = tokio::runtime::Builder::new_multi_thread()

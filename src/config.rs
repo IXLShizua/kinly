@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, net, path::Path};
 
 use figment::providers::{self, Format};
 use serde::{Deserialize, Serialize};
@@ -56,25 +56,23 @@ pub enum LoadConfigError {
         source: io::Error,
     },
 
-    #[snafu(display("extracting existing config"))]
-    Extract {
+    #[snafu(display("reading existing config"))]
+    Read {
         #[snafu(source)]
         source: Box<figment::Error>,
     },
 }
 
-pub enum ConfigSource {
+pub enum Resolved {
     Created(Config),
     Loaded(Config),
 }
 
-pub fn load_or_create_config(path: &Path) -> Result<ConfigSource, LoadConfigError> {
+pub fn resolve_config(path: &Path) -> Result<Resolved, LoadConfigError> {
     if !path.exists() {
         let config = Config {
             binds: Binds {
-                host: "0.0.0.0"
-                    .parse()
-                    .expect("The correct host should be parsed"),
+                host: net::Ipv4Addr::UNSPECIFIED,
                 port: 10000,
             },
             servers: Vec::default(),
@@ -83,15 +81,15 @@ pub fn load_or_create_config(path: &Path) -> Result<ConfigSource, LoadConfigErro
         let serialized = serde_json::to_string_pretty(&config).unwrap();
         fs::write(path, serialized).context(WriteSnafu)?;
 
-        return Ok(ConfigSource::Created(config));
+        return Ok(Resolved::Created(config));
     }
 
     let config = figment::Figment::new()
         .join(providers::Json::file(path))
         .extract::<Config>()
-        .map_err(|err| LoadConfigError::Extract {
+        .map_err(|err| LoadConfigError::Read {
             source: Box::new(err),
         })?;
 
-    Ok(ConfigSource::Loaded(config))
+    Ok(Resolved::Loaded(config))
 }

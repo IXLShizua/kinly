@@ -1,5 +1,6 @@
 use crate::http::{
-    dto::response::profile::Profile, extractors::current_server::CurrentServerHandle,
+    dto::response::profile::Profile,
+    extractors::current_server::CurrentServerHandle,
     routes::sessionserver::mapper::map_player_profile,
 };
 use axum::{
