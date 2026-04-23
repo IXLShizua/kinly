@@ -103,7 +103,7 @@ async fn async_main(
             let server = state::Server {
                 key_pair: state::ServerKeyPair {
                     private: pkey::PKey::from_rsa(keypair.private.clone())
-                        .expect("failed to get pkey from rsa pkey"),
+                        .expect("failed to construct pkey from rsa pkey"),
                     public: keypair.public.clone(),
                 },
                 assets: match server.meta.assets {
