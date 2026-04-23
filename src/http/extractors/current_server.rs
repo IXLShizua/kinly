@@ -11,10 +11,15 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 pub struct CurrentServerHandle {
+    name: String,
     server: Arc<Server>,
 }
 
 impl CurrentServerHandle {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn keypair(&self) -> &ServerKeyPair {
         &self.server.key_pair
     }
@@ -35,22 +40,23 @@ impl FromRequestParts<ClonableState> for CurrentServerHandle {
         parts: &mut Parts,
         state: &ClonableState,
     ) -> Result<Self, Self::Rejection> {
-        let Path(path) = Path::<PathWithServerId>::from_request_parts(parts, state)
+        let Path(path) = Path::<PathWithServerName>::from_request_parts(parts, state)
             .await
             .map_err(|err| err.into_response())?;
 
         let server = state
             .servers
-            .get(&path.server_id)
+            .get(&path.server_name)
             .ok_or_else(|| StatusCode::NO_CONTENT.into_response())?;
 
         Ok(CurrentServerHandle {
+            name: path.server_name,
             server: Arc::clone(server),
         })
     }
 }
 
 #[derive(Deserialize)]
-struct PathWithServerId {
-    server_id: String,
+struct PathWithServerName {
+    server_name: String,
 }

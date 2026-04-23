@@ -13,7 +13,7 @@ pub async fn init(
 ) -> Result<(), io::Error> {
     let router = Router::new()
         .nest(
-            "/{server_id}",
+            "/{server_name}",
             Router::new()
                 .merge(root::router())
                 .nest("/api", api::router())

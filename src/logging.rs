@@ -20,41 +20,47 @@ pub enum InitLoggingError {
 }
 
 pub fn load(dir: &Path) -> Result<(), InitLoggingError> {
-    tracing_subscriber::registry()
-        .with(
-            fmt::layer().with_filter(
-                filter::EnvFilter::builder()
-                    .with_default_directive(Level::INFO.into())
-                    .with_env_var("LOG_LEVEL")
-                    .from_env()
-                    .context(InvalidEnvVariableSnafu)?,
-            ),
-        )
-        .with({
-            let timestamp = time::SystemTime::now()
-                .duration_since(time::UNIX_EPOCH)
+    let filter = filter::EnvFilter::builder()
+        .with_default_directive(Level::INFO.into())
+        .with_env_var("LOG_LEVEL")
+        .from_env()
+        .context(InvalidEnvVariableSnafu)?;
+
+    let stdout = fmt::layer().with_filter(filter.clone());
+
+    let file = {
+        let timestamp = time::SystemTime::now()
+            .duration_since(time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let file = {
+            if let Err(err) = fs::create_dir(dir)
+                && err.kind() != io::ErrorKind::AlreadyExists
+            {
+                return Err(InitLoggingError::DirCreation { source: err });
+            }
+
+            fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(dir.join(format!("{}.log", timestamp)))
                 .unwrap()
-                .as_secs();
+        };
 
-            let file = {
-                if let Err(err) = fs::create_dir(dir)
-                    && err.kind() != io::ErrorKind::AlreadyExists
-                {
-                    return Err(InitLoggingError::DirCreation { source: err });
-                }
+        fmt::layer()
+            .with_ansi(false)
+            .with_writer(file)
+            .with_filter(filter)
+    };
 
-                fs::OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(dir.join(format!("debug-{}.log", timestamp)))
-                    .unwrap()
-            };
-
-            fmt::layer()
-                .with_ansi(false)
-                .with_writer(file)
-                .with_filter(filter::LevelFilter::from_level(Level::DEBUG))
-        })
+    // Keep the file layer before the stdout layer.
+    // With multiple `fmt` layers, ANSI formatting from an ANSI-enabled stdout layer can leak
+    // into span fields written by the file layer if the layers are reordered.
+    // The file layer must be registered first so plain log files stay free of ANSI escape codes.
+    tracing_subscriber::registry()
+        .with(file)
+        .with(stdout)
         .init();
 
     Ok(())
